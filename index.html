@@ -785,8 +785,19 @@ function parseWorkbook(wb, fileName) {
 }
 
 async function handleFile(file) { return handleBuffer(await file.arrayBuffer(), file.name); }
+function fileKind(buf) {
+  const h = new Uint8Array(buf.slice(0, 8));
+  if (h[0] === 0xFF && h[1] === 0xD8) return "image";
+  if (h[0] === 0x89 && h[1] === 0x50) return "image";
+  if (h[0] === 0x52 && h[1] === 0x49 && h[2] === 0x46) return "image"; // webp
+  if (h[0] === 0x25 && h[1] === 0x50 && h[2] === 0x44 && h[3] === 0x46) return "pdf";
+  return "sheet";
+}
 function handleBuffer(buf, fileName) {
   if (!window.XLSX) { toast("엑셀 도구를 불러오지 못했어요. 인터넷 연결을 확인해 주세요."); return; }
+  const kind = fileKind(buf);
+  if (kind === "image") return ask({ title: "사진은 아직 읽을 수 없어요", body: "명단 사진 인식은 다음 단계에서 넣을 예정이에요. 지금은 엑셀 파일(.xlsx)을 골라 주세요.", actions: [{ label: "확인", cls: "primary" }] });
+  if (kind === "pdf") return ask({ title: "엑셀이 아니라 PDF로 받아졌어요", body: "구글 시트 파일을 휴대폰 파일 선택 창에서 고르면 PDF로 넘어올 수 있어요. 구글 시트에서 <b>파일 → 다운로드 → Microsoft Excel(.xlsx)</b>로 받은 뒤, 그 파일을 골라 주세요.", actions: [{ label: "확인", cls: "primary" }] });
   let groups;
   try {
     const wb = XLSX.read(buf, { type: "array" });
@@ -796,7 +807,13 @@ function handleBuffer(buf, fileName) {
     return;
   }
   if (!groups.length) {
-    ask({ title: "학생 이름을 찾지 못했어요", body: "첫 줄에 <b>번호</b>, <b>이름</b>(또는 성명) 제목을 넣고 다시 올려 주세요.", actions: [{ label: "확인", cls: "primary" }] });
+    let peek = "";
+    try {
+      const wb = XLSX.read(buf, { type: "array" });
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: "", raw: false }).slice(0, 3);
+      peek = rows.map(r => r.slice(0, 4).map(c => esc(String(c).slice(0, 12))).join(" | ")).filter(Boolean).join("<br>");
+    } catch (e) {}
+    ask({ title: "학생 이름을 찾지 못했어요", body: `첫 줄에 <b>번호</b>, <b>이름</b>(또는 성명) 제목을 넣고 다시 올려 주세요.${peek ? `<br><br>파일 첫 부분은 이렇게 읽혔어요<br><code>${peek}</code>` : "<br><br>파일에서 글자를 하나도 읽지 못했어요."}<br>파일 이름: ${esc(fileName)}`, actions: [{ label: "확인", cls: "primary" }] });
     return;
   }
   showImportPreview(groups);
