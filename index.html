@@ -230,6 +230,7 @@ main.wrap { padding-block: 16px 140px; display: flex; flex-direction: column; ga
   bottom: calc(86px + env(safe-area-inset-bottom, 0px));
   background: var(--ink); color: var(--bg); border-radius: 12px; padding: 10px 16px;
   font-size: 14px; max-width: calc(100% - 32px); box-shadow: var(--shadow);
+  pointer-events: none;
 }
 /* 음성 출석 */
 .roll {
@@ -244,17 +245,28 @@ main.wrap { padding-block: 16px 140px; display: flex; flex-direction: column; ga
 .roll-who .no { font: 26px/1 var(--display); color: var(--muted); font-variant-numeric: tabular-nums; }
 .roll-who .nm { font: clamp(44px, 14vw, 72px)/1.1 var(--display); word-break: keep-all; }
 .roll-toggle {
-  flex: 1; min-height: 160px; border-radius: 24px; border: 3px solid var(--line);
+  flex: none; min-height: 84px; border-radius: 18px; border: 2px solid var(--line);
   background: var(--surface); color: var(--ink);
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
-  font: 52px/1 var(--display); touch-action: manipulation;
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  font: 34px/1 var(--display); touch-action: manipulation;
 }
-.roll-toggle small { font: 500 15px/1.3 var(--body); color: var(--muted); }
+.roll-toggle small { font: 500 14px/1.3 var(--body); color: var(--muted); }
 .roll-toggle.absent { background: var(--absent); border-color: var(--absent); color: #fff; }
 .roll-toggle.absent small { color: rgba(255,255,255,.85); }
-.roll-nav { display: grid; grid-template-columns: 1fr 1.25fr 1fr; gap: 10px; }
-.roll-nav .btn { min-height: 104px; border-radius: 20px; font-size: 19px; flex-direction: column; gap: 2px; padding: 0 8px; }
-.roll-nav .btn small { font-size: 13px; font-weight: 500; opacity: .8; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.roll .btn { flex-direction: column; gap: 4px; border-radius: 22px; touch-action: manipulation; }
+.roll .btn small { font: 500 15px/1.2 var(--body); opacity: .8; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.roll-next { flex: 1.5 1 0; min-height: 150px; font: 46px/1 var(--display); }
+.roll-again { flex: 1 1 0; min-height: 110px; font: 34px/1 var(--display); border-width: 2px; }
+.roll-prev { flex: none; min-height: 60px; font-size: 18px; }
+.roll-prev small { font-size: 13px; }
+.roll-set { min-height: 52px !important; font-size: 15px !important; border-radius: 14px !important; font-weight: 500; }
+.set { display: flex; flex-direction: column; gap: 8px; }
+.set-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.set select { flex: 1; min-width: 0; min-height: 44px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 10px; padding: 0 8px; }
+.set input[type=range] { width: 100%; accent-color: var(--accent); height: 32px; }
+.seg { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: var(--bg); border-radius: 12px; padding: 4px; }
+.seg button { border: 0; background: transparent; border-radius: 9px; min-height: 48px; font-weight: 600; font-size: 16px; color: var(--muted); }
+.seg button.on { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
 .roll-start { flex: 1; display: flex; flex-direction: column; gap: 16px; justify-content: center; text-align: center; }
 .roll-start h2 { font: 30px/1.25 var(--display); margin: 0; text-wrap: balance; }
 .roll-start p { margin: 0; color: var(--muted); }
@@ -321,6 +333,7 @@ const ICON = {
   share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 8l5-5 5 5"/><path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></svg>',
   upload: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 18v-6"/><path d="M9 15l3-3 3 3"/></svg>',
   list: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>',
+  gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
   voice: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>'
 };
 
@@ -390,7 +403,7 @@ function renderHome() {
     <p class="help">학생을 누르면 <b>결석</b>, 아무것도 누르지 않으면 <b>출석</b>으로 저장돼요.</p>`;
   }
   app.innerHTML = `
-    <header class="bar"><div class="wrap"><h1>수업 출석부</h1><span class="sub">${today}</span></div></header>
+    <header class="bar"><div class="wrap"><h1>수업 출석부</h1><span class="sub">${today}</span><button class="icon-btn" data-act="voice-set" aria-label="음성 설정">${ICON.gear}</button></div></header>
     <main class="wrap">${body}</main>
     ${classes.length ? `<div class="dock"><div class="wrap">
       <button class="btn" data-act="import">${ICON.upload}명단 올리기</button>
@@ -513,23 +526,79 @@ const prefs = (() => { try { return JSON.parse(localStorage.getItem(KEY + ".pref
 if (prefs.sayNo === undefined) prefs.sayNo = true;
 function savePrefs() { try { localStorage.setItem(KEY + ".prefs", JSON.stringify(prefs)); } catch (e) {} }
 
-let koVoice = null;
-function pickVoice() {
-  try {
-    const v = speechSynthesis.getVoices();
-    koVoice = v.find(x => /^ko/i.test(x.lang) && x.localService) || v.find(x => /^ko/i.test(x.lang)) || null;
-  } catch (e) {}
+if (prefs.gender === undefined) prefs.gender = "female";
+if (prefs.rate === undefined) prefs.rate = 0.9;
+
+// 목소리 이름으로 성별 짐작 (기기마다 이름이 달라 모를 수도 있음)
+const FEMALE = /female|woman|여성|여자|yuna|heami|sunhi|jimin|seoyeon|x-ism|x-kob/i;
+const MALE = /\bmale\b|man\b|남성|남자|injoon|hyunsu|bongjin|gookmin|x-koc|x-kod/i;
+const genderOf = v => FEMALE.test(v.name + " " + v.voiceURI) ? "female" : MALE.test(v.name + " " + v.voiceURI) ? "male" : null;
+let koVoices = [];
+function loadVoices() { try { koVoices = speechSynthesis.getVoices().filter(x => /^ko/i.test(x.lang)); } catch (e) {} }
+if ("speechSynthesis" in window) { loadVoices(); speechSynthesis.onvoiceschanged = loadVoices; }
+function chooseVoice() {
+  if (!koVoices.length) loadVoices();
+  const picked = prefs.voiceURI && koVoices.find(v => v.voiceURI === prefs.voiceURI);
+  if (picked) return picked;
+  return koVoices.find(v => genderOf(v) === prefs.gender && v.localService)
+      || koVoices.find(v => genderOf(v) === prefs.gender)
+      || koVoices.find(v => v.localService) || koVoices[0] || null;
 }
-if ("speechSynthesis" in window) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
 function speak(text) {
   if (!("speechSynthesis" in window)) return;
   try {
     speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = "ko-KR"; if (koVoice) u.voice = koVoice;
-    u.volume = 1; u.rate = 0.9;
+    const u = new SpeechSynthesisUtterance(text), v = chooseVoice();
+    u.lang = "ko-KR"; if (v) u.voice = v;
+    // 고른 성별의 목소리가 기기에 없으면 높낮이로 맞춤
+    u.pitch = v && genderOf(v) === prefs.gender ? 1 : (prefs.gender === "male" ? 0.65 : 1.15);
+    u.volume = 1; u.rate = prefs.rate;
     speechSynthesis.speak(u);
   } catch (e) {}
+}
+const rateLabel = r => (r < 0.85 ? "느리게" : r > 1.05 ? "빠르게" : "보통") + ` · ${r.toFixed(1)}배`;
+function openVoiceSettings() {
+  loadVoices();
+  const opts = koVoices.map(v => {
+    const g = genderOf(v);
+    return `<option value="${esc(v.voiceURI)}" ${prefs.voiceURI === v.voiceURI ? "selected" : ""}>${esc(v.name)}${g ? (g === "male" ? " (남자)" : " (여자)") : ""}</option>`;
+  }).join("");
+  sheet(`<h2>음성 설정</h2>
+    <div class="set">
+      <span class="label">목소리</span>
+      <div class="seg" role="radiogroup">
+        <button class="${prefs.gender === "female" ? "on" : ""}" data-g="female" role="radio" aria-checked="${prefs.gender === "female"}">여자</button>
+        <button class="${prefs.gender === "male" ? "on" : ""}" data-g="male" role="radio" aria-checked="${prefs.gender === "male"}">남자</button>
+      </div>
+      ${koVoices.length > 1 ? `<label class="set-row"><span>기기 목소리</span><select id="v-uri"><option value="">자동으로 고르기</option>${opts}</select></label>` : ""}
+      <p class="help">기기에 고른 성별의 목소리가 없으면 높낮이를 바꿔 비슷하게 들려 드려요.</p>
+    </div>
+    <div class="set">
+      <label class="set-row" for="v-rate"><span class="label">읽는 속도</span><span id="v-rate-l">${rateLabel(prefs.rate)}</span></label>
+      <input type="range" id="v-rate" min="0.5" max="1.5" step="0.1" value="${prefs.rate}">
+      <div class="set-row help"><span>느리게</span><span>빠르게</span></div>
+    </div>
+    <label class="roll-opt"><input type="checkbox" id="v-no" ${prefs.sayNo ? "checked" : ""}> 번호도 함께 읽기</label>
+    <div class="acts">
+      <button class="btn block" id="v-test">${ICON.voice}미리 듣기</button>
+      <button class="btn primary block" id="v-done">확인</button>
+    </div>`, (el, close) => {
+    const test = () => speak(prefs.sayNo ? "1번, 홍길동" : "홍길동");
+    el.querySelectorAll("[data-g]").forEach(b => b.onclick = () => {
+      prefs.gender = b.dataset.g; prefs.voiceURI = "";
+      const sel = el.querySelector("#v-uri"); if (sel) sel.value = "";
+      el.querySelectorAll("[data-g]").forEach(x => { x.classList.toggle("on", x === b); x.setAttribute("aria-checked", x === b); });
+      savePrefs(); test();
+    });
+    const sel = el.querySelector("#v-uri");
+    if (sel) sel.onchange = () => { prefs.voiceURI = sel.value; savePrefs(); test(); };
+    const r = el.querySelector("#v-rate");
+    r.oninput = () => { prefs.rate = +r.value; el.querySelector("#v-rate-l").textContent = rateLabel(prefs.rate); };
+    r.onchange = () => { savePrefs(); test(); };
+    el.querySelector("#v-no").onchange = e => { prefs.sayNo = e.target.checked; savePrefs(); };
+    el.querySelector("#v-test").onclick = test;
+    el.querySelector("#v-done").onclick = () => { savePrefs(); close(); };
+  });
 }
 const sayStudent = s => speak(prefs.sayNo ? `${s.no}번, ${s.name}` : s.name);
 
@@ -552,20 +621,18 @@ function openRoll() {
       <h2>번호순으로 이름을 불러 드릴게요</h2>
       <div class="vol">시작하기 전에 휴대폰 <b>음량을 최대로</b> 올려 주세요. 블루투스 스피커에 연결하면 뒷자리까지 더 잘 들려요.</div>
       ${noVoice ? `<p>이 브라우저는 음성 읽기를 지원하지 않아요. 화면의 이름을 보며 진행할 수 있어요.</p>` : ""}
-      <label class="roll-opt"><input type="checkbox" id="r-no" ${prefs.sayNo ? "checked" : ""}> 번호도 함께 읽기</label>
       <button class="btn primary" data-r="start">시작</button>
+      <button class="btn roll-set" data-r="settings">음성 설정 · ${prefs.gender === "male" ? "남자" : "여자"} 목소리, ${rateLabel(prefs.rate)}</button>
     </div>`;
 }
 function renderRoll() {
   const s = R.list[R.i], ab = S.draft.absent.has(s.id), last = R.i === R.list.length - 1;
   R.el.innerHTML = `<div class="roll-top"><button class="btn" data-r="close">그만하기</button><span class="prog">${R.i + 1} / ${R.list.length}</span></div>
     <div class="roll-who"><span class="no">${s.no}번</span><span class="nm">${esc(s.name)}</span></div>
-    <button class="roll-toggle ${ab ? "absent" : ""}" data-r="toggle" aria-pressed="${ab}">${ab ? "결석" : "출석"}<small>${ab ? "누르면 출석으로 바뀌어요" : "누르면 결석으로 바뀌어요"}</small></button>
-    <div class="roll-nav">
-      <button class="btn" data-r="prev" ${R.i === 0 ? "disabled" : ""}>이전<small>${R.i > 0 ? esc(R.list[R.i - 1].name) : "&nbsp;"}</small></button>
-      <button class="btn" data-r="again">다시 부르기<small>${esc(s.name)}</small></button>
-      <button class="btn ${last ? "roll-done" : "primary"}" data-r="next">${last ? "완료" : "다음"}<small>${last ? "출석 저장" : esc(R.list[R.i + 1].name)}</small></button>
-    </div>`;
+    <button class="roll-toggle ${ab ? "absent" : ""}" data-r="toggle" aria-pressed="${ab}">${ab ? "결석" : "출석"}<small>${ab ? "누르면 출석으로" : "누르면 결석으로"}</small></button>
+    <button class="btn roll-next ${last ? "roll-done" : "primary"}" data-r="next">${last ? "완료" : "다음"}<small>${last ? "출석 저장" : esc(R.list[R.i + 1].no + "번 " + R.list[R.i + 1].name)}</small></button>
+    <button class="btn roll-again" data-r="again">다시 부르기<small>${esc(s.name)}</small></button>
+    <button class="btn roll-prev" data-r="prev" ${R.i === 0 ? "disabled" : ""}>이전${R.i > 0 ? `<small>${esc(R.list[R.i - 1].name)}</small>` : ""}</button>`;
 }
 document.addEventListener("click", e => {
   if (!R) return;
@@ -574,12 +641,12 @@ document.addEventListener("click", e => {
   const s = R.list[R.i], d = S.draft;
   switch (b.dataset.r) {
     case "start":
-      prefs.sayNo = R.el.querySelector("#r-no").checked; savePrefs();
       R.started = true; keepAwake(); renderRoll(); sayStudent(R.list[0]); break;
     case "toggle":
       if (d.absent.has(s.id)) { d.absent.delete(s.id); buzz(20); } else { d.absent.add(s.id); buzz([70, 50, 70]); }
       S.dirty = true; renderRoll(); break;
     case "again": sayStudent(s); break;
+    case "settings": openVoiceSettings(); break;
     case "prev": R.i--; renderRoll(); sayStudent(R.list[R.i]); break;
     case "next":
       if (R.i < R.list.length - 1) { R.i++; renderRoll(); sayStudent(R.list[R.i]); }
@@ -881,6 +948,7 @@ app.addEventListener("click", e => {
     case "export-one": exportSheet([cls], `${cls.name} 내보내기`); break;
     case "save": saveSession(); break;
     case "roll": openRoll(); break;
+    case "voice-set": openVoiceSettings(); break;
     case "back": history.back(); break;
     case "records":
       if (S.dirty || !S.draft.id) {
