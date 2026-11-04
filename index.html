@@ -878,15 +878,30 @@ function exportFile(classes) {
   const type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
   return { fname, blob: new Blob([data], { type }), file: new File([data], fname, { type }) };
 }
+// 안드로이드 크롬·삼성 인터넷은 공유 메뉴로 .xlsx를 보낼 수 없어서(허용 형식 제한) CSV로 보냄
+function csvFiles(classes) {
+  const d = nowDT().slice(0, 10);
+  return classes.map(cls => {
+    const wb = buildWorkbook([cls]);
+    const main = XLSX.utils.sheet_to_csv(wb.Sheets[wb.SheetNames[0]]);
+    const prog = XLSX.utils.sheet_to_csv(wb.Sheets["진도 기록"]);
+    const text = "\uFEFF" + main + "\n\n진도 기록\n" + prog;
+    const fname = `출석부_${cls.name}_${d}.csv`.replace(/[\\/:*?"<>|]/g, "_");
+    return new File([text], fname, { type: "text/csv" });
+  });
+}
 async function shareOut(classes) {
   if (!window.XLSX) { toast("엑셀 도구를 불러오지 못했어요. 인터넷 연결을 확인해 주세요."); return; }
+  if (!navigator.share) { toast("이 브라우저는 공유 메뉴를 쓸 수 없어서 파일로 저장할게요"); return saveOut(classes); }
   const { file } = exportFile(classes);
-  if (navigator.canShare && navigator.canShare({ files: [file] })) {
-    try { await navigator.share({ files: [file], title: file.name }); return; }
-    catch (e) { if (e.name === "AbortError") return; }
+  let files = [file];
+  if (!(navigator.canShare && navigator.canShare({ files }))) files = csvFiles(classes);
+  if (navigator.canShare && !navigator.canShare({ files })) { toast("이 브라우저는 파일 공유를 지원하지 않아서 파일로 저장할게요"); return saveOut(classes); }
+  try { await navigator.share({ files, title: "출석부" }); }
+  catch (e) {
+    if (e.name === "AbortError") return;
+    toast("공유하지 못해서 파일로 저장할게요"); saveOut(classes);
   }
-  toast("이 기기는 공유 메뉴를 쓸 수 없어서 파일로 저장할게요");
-  saveOut(classes);
 }
 function saveOut(classes) {
   if (!window.XLSX) { toast("엑셀 도구를 불러오지 못했어요. 인터넷 연결을 확인해 주세요."); return; }
@@ -900,10 +915,11 @@ function saveOut(classes) {
 function exportSheet(classes, title) {
   const n = classes.reduce((t, c) => t + classSessions(c.id).length, 0);
   sheet(`<h2>${esc(title)}</h2>
-    <p>${classes.length}개 반, 수업 기록 ${n}회가 엑셀 한 파일에 담겨요. 반마다 시트가 하나씩 생기고, 진도 메모는 '진도 기록' 시트에 모여요.</p>
+    <p>${classes.length}개 반, 수업 기록 ${n}회를 내보내요.</p>
+    <p class="help"><b>공유하기</b>는 휴대폰 제한 때문에 반마다 CSV 파일로 보내요. 컴퓨터의 엑셀에서 그대로 열려요. 시트가 나뉜 엑셀 파일(.xlsx)이 필요하면 <b>파일로 저장</b>을 눌러 주세요.</p>
     <div class="acts">
       <button class="btn primary block" id="ex-share">${ICON.share}공유하기 (카카오톡·드라이브·메일)</button>
-      <button class="btn block" id="ex-save">이 기기에 파일로 저장</button>
+      <button class="btn block" id="ex-save">엑셀 파일(.xlsx)로 저장</button>
       <button class="btn block" id="ex-cancel">취소</button>
     </div>`, (el, close) => {
     el.querySelector("#ex-share").onclick = () => { close(); shareOut(classes); };
