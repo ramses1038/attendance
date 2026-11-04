@@ -207,6 +207,16 @@ main.wrap { padding-block: 16px 140px; display: flex; flex-direction: column; ga
 
 /* 기록 목록 */
 .records { display: flex; flex-direction: column; gap: 8px; }
+.rec { text-align: left; color: var(--ink); width: 100%; }
+.label.month { margin-top: 6px; }
+.rec .chev { grid-row: 1 / span 2; grid-column: 2; color: var(--muted); display: flex; align-items: center; }
+.day-nav { display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 8px; }
+.day-nav .day-now { grid-column: 1 / -1; order: -1; }
+.day-nav .btn { min-height: 44px; padding: 0 8px; font-size: 13px; font-weight: 500; gap: 2px; font-variant-numeric: tabular-nums; }
+.day-nav .btn svg { width: 18px; height: 18px; flex: none; }
+.day-nav .btn:last-child { justify-content: flex-end; }
+.day-now { font: 22px/1.2 var(--display); text-align: center; white-space: nowrap; }
+.tile.view { cursor: default; }
 .rec {
   border: 1px solid var(--line); background: var(--surface); border-radius: var(--r);
   padding: 12px 14px; display: grid; grid-template-columns: 1fr auto; gap: 4px 10px;
@@ -456,6 +466,7 @@ function render() {
   else if (S.view === "class") renderClass();
   else if (S.view === "records") renderRecords();
   else if (S.view === "roster") renderRoster();
+  else if (S.view === "session") renderSession();
   window.scrollTo(0, 0);
 }
 
@@ -1027,7 +1038,19 @@ function addStudent() {
 function renderRecords() {
   const cls = getClass(S.classId);
   const ses = classSessions(cls.id).reverse();
-  const nameOf = id => (cls.students.find(s => s.id === id) || {}).name || "(삭제된 학생)";
+  let month = "";
+  const items = ses.map(s => {
+    const m = s.dt.slice(0, 7);
+    const head = m !== month ? `<div class="label month">${+m.slice(0, 4)}년 ${+m.slice(5, 7)}월</div>` : "";
+    month = m;
+    const all = activeAt(cls, s.dt).length, call = callAt(cls, s.dt).length;
+    return `${head}<button class="rec" data-view="${s.id}">
+      <span class="when">${prettyDT(s.dt)}</span>
+      <span class="chev">${ICON.chev}</span>
+      <span class="abs">${s.absent.length ? `결석 <b>${s.absent.length}명</b> · ${s.absent.map(id => esc(nameOfIn(cls, id))).join(", ")}` : "전원 출석"}${all > call ? ` · 제외 ${all - call}명` : ""}</span>
+      ${s.memo ? `<span class="memo">${esc(s.memo.split("\n")[0])}</span>` : ""}
+    </button>`;
+  }).join("");
   app.innerHTML = `
     <header class="bar"><div class="wrap">
       <button class="icon-btn" data-act="to-class" aria-label="출석 체크로">${ICON.back}</button>
@@ -1035,22 +1058,64 @@ function renderRecords() {
       <button class="icon-btn" data-act="roster">${ICON.people}명단수정</button>
     </div></header>
     <main class="wrap">
-      <div class="records">${ses.length ? ses.map(s => `
-        <div class="rec">
-          <span class="when">${prettyDT(s.dt)}</span>
-          <span class="acts">
-            <button class="btn" data-edit="${s.id}">고치기</button>
-            <button class="btn danger" data-del="${s.id}" aria-label="기록 지우기">지우기</button>
-          </span>
-          <span class="abs">${s.absent.length ? `결석 <b>${s.absent.length}명</b> · ${s.absent.map(id => esc(nameOf(id))).join(", ")}` : "전원 출석"}</span>
-          ${s.memo ? `<span class="memo">${esc(s.memo)}</span>` : ""}
-        </div>`).join("") : `<p class="help">아직 저장한 출석이 없어요.</p>`}
-      </div>
-      <button class="btn danger" data-act="del-class">이 반 지우기</button>
+      <p class="help">날짜를 누르면 그날 출석부를 볼 수 있어요. 수업 ${ses.length}회</p>
+      <div class="records">${ses.length ? items : `<p class="help">아직 저장한 출석이 없어요.</p>`}</div>
     </main>
     <div class="dock"><div class="wrap">
       <button class="btn" data-act="new-session">새 출석 체크</button>
       <button class="btn primary" data-act="export-one">${ICON.share}이 반 내보내기</button>
+    </div></div>`;
+}
+const nameOfIn = (cls, id) => (cls.students.find(s => s.id === id) || {}).name || "(지운 학생)";
+
+/* ---------- 지난 출석부 조회 ---------- */
+function openSession(id) {
+  S.sessionId = id; S.view = "session"; S.filter = "all";
+  history.pushState({ v: "session" }, "");
+  render();
+}
+function renderSession() {
+  const cls = getClass(S.classId);
+  const list = classSessions(cls.id);
+  const i = list.findIndex(x => x.id === S.sessionId);
+  if (i < 0) { S.view = "records"; return render(); }
+  const ses = list[i], prev = list[i - 1], next = list[i + 1];
+  const absent = new Set(ses.absent);
+  const all = activeAt(cls, ses.dt), call = callAt(cls, ses.dt);
+  const offs = all.filter(s => offAt(s, ses.dt));
+  const f = S.filter || "all", on = k => (f === k ? " sel" : "");
+  const shown = f === "absent" ? call.filter(s => absent.has(s.id)) : f === "present" ? call.filter(s => !absent.has(s.id)) : f === "off" ? offs : call;
+  const tile = s => offAt(s, ses.dt)
+    ? `<div class="tile off-tile"><span class="no">${s.no ?? ""}</span><span class="mark offm">${esc(offAt(s, ses.dt))}</span><span class="name">${esc(s.name)}</span></div>`
+    : `<div class="tile view ${absent.has(s.id) ? "absent" : ""}"><span class="no">${s.no ?? ""}</span>${absent.has(s.id) ? '<span class="mark">결석</span>' : ""}<span class="name">${esc(s.name)}</span></div>`;
+  const label = { present: "출석", absent: "결석", off: "출석 제외" }[f];
+  app.innerHTML = `
+    <header class="bar"><div class="wrap">
+      <button class="icon-btn" data-act="session-back" aria-label="기록 목록으로">${ICON.back}</button>
+      <h1>${esc(cls.name)}</h1>
+      <span class="sub">${i + 1} / ${list.length}회</span>
+    </div></header>
+    <main class="wrap">
+      <div class="day-nav">
+        <button class="btn" data-act="ses-prev" ${prev ? "" : "disabled"} aria-label="이전 수업">${ICON.back}<span>${prev ? colDT(prev.dt) : "처음"}</span></button>
+        <div class="day-now">${prettyDT(ses.dt)}</div>
+        <button class="btn" data-act="ses-next" ${next ? "" : "disabled"} aria-label="다음 수업"><span>${next ? colDT(next.dt) : "마지막"}</span>${ICON.chev}</button>
+      </div>
+      <section class="prev ${ses.memo ? "" : "none"}">
+        <span class="label">이날 진도</span>
+        <span class="text">${ses.memo ? esc(ses.memo) : "진도 메모가 없어요."}</span>
+      </section>
+      <div class="tally">
+        <button class="${on("all")}" data-vf="all">재적 ${all.length}</button><button class="${on("present")}" data-vf="present">출석 ${call.length - ses.absent.length}</button><button class="abs${on("absent")}" data-vf="absent">결석 ${ses.absent.length}</button>${offs.length ? `<button class="off${on("off")}" data-vf="off">제외 ${offs.length}</button>` : ""}
+      </div>
+      ${label ? `<div class="filter-note"><span>${label} ${shown.length}명만 보는 중</span><button class="btn small" data-vf="all">전체 보기</button></div>` : ""}
+      <div class="grid">${shown.length ? shown.map(tile).join("") : `<p class="help">${label || "출석을 부른"} 학생이 없어요.</p>`}</div>
+      ${f === "all" && offs.length ? `<p class="excluded">출석을 부르지 않은 학생 ${offs.length}명 · ${offs.map(s => `${s.no ?? ""} ${esc(s.name)} <b>${esc(offAt(s, ses.dt))}</b>`).join(", ")}</p>` : ""}
+      <p class="help">조회 화면이라 여기서는 바뀌지 않아요. 고치려면 아래 <b>이날 출석 고치기</b>를 눌러 주세요.</p>
+    </main>
+    <div class="dock"><div class="wrap">
+      <button class="btn danger" data-del="${ses.id}">기록 지우기</button>
+      <button class="btn primary" data-edit="${ses.id}">이날 출석 고치기</button>
     </div></div>`;
 }
 
@@ -1863,6 +1928,8 @@ app.addEventListener("click", e => {
   if (t.dataset.sid) return toggle(t.dataset.sid);
   if (t.dataset.open) return openClass(t.dataset.open);
   if (t.dataset.stu) return openStudent(t.dataset.stu);
+  if (t.dataset.view) return openSession(t.dataset.view);
+  if (t.dataset.vf) { S.filter = S.filter === t.dataset.vf ? "all" : t.dataset.vf; return renderSession(); }
   if (t.dataset.tally) { const k = t.dataset.tally; S.filter = S.filter === k || k === "all" ? "all" : k; return drawGrid(); }
   if (t.dataset.delclass) return deleteClass(getClass(t.dataset.delclass));
   if (t.dataset.rename) return renameClass(getClass(t.dataset.rename));
@@ -1871,7 +1938,7 @@ app.addEventListener("click", e => {
   if (t.dataset.del) {
     const s = db.sessions.find(x => x.id === t.dataset.del);
     return ask({ title: `${prettyDT(s.dt)} 기록을 지울까요?`, body: "지운 기록은 되돌릴 수 없어요.",
-      actions: [{ label: "지우기", cls: "solid-danger", fn: () => { db.sessions = db.sessions.filter(x => x.id !== s.id); persist(); render(); toast("기록을 지웠어요"); } }, { label: "취소" }] });
+      actions: [{ label: "지우기", cls: "solid-danger", fn: () => { db.sessions = db.sessions.filter(x => x.id !== s.id); persist(); if (S.view === "session") { history.back(); } else render(); toast("기록을 지웠어요"); } }, { label: "취소" }] });
   }
   const cls = getClass(S.classId);
   switch (t.dataset.act) {
@@ -1883,6 +1950,13 @@ app.addEventListener("click", e => {
     case "export-one": exportSheet([cls], `${cls.name} 내보내기`); break;
     case "save": saveSession(); break;
     case "roll": openRoll(); break;
+    case "session-back": history.back(); break;
+    case "ses-prev": case "ses-next": {
+      const list = classSessions(S.classId), i = list.findIndex(x => x.id === S.sessionId);
+      const to = list[i + (t.dataset.act === "ses-prev" ? -1 : 1)];
+      if (to) { S.sessionId = to.id; S.filter = "all"; render(); }
+      break;
+    }
     case "roster": openRoster(); break;
     case "roster-back": history.back(); break;
     case "add-student": addStudent(); break;
@@ -1913,6 +1987,7 @@ window.addEventListener("popstate", () => {
   if (R) return closeRoll();
   if (S.view === "roster") { S.view = S.rosterFrom || "class"; return render(); }
   if (S.view === "home") return;
+  if (S.view === "session") { S.view = "records"; return render(); }
   if (S.view === "records") { S.view = "home"; S.draft = null; return render(); }
   leaveClass();
 });
