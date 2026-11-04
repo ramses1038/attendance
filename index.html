@@ -160,6 +160,11 @@ main.wrap { padding-block: 16px 140px; display: flex; flex-direction: column; ga
 .tally button { min-height: 34px; padding: 0 12px; }
 .tally button.abs { background: var(--absent-bg); color: var(--absent-ink); border-color: transparent; }
 .tally button.off { background: var(--off-bg); color: var(--off-ink); border-color: transparent; }
+.tally button.sel { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.filter-note { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 14px; font-weight: 600; color: var(--accent); }
+.filter-note:empty { display: none; }
+.off-tile { background: var(--off-bg); border-color: transparent; color: var(--off-ink); cursor: default; }
+.mark.offm { color: var(--off-ink); }
 .who-list { display: flex; flex-wrap: wrap; gap: 6px; }
 .who-list span { border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; font-size: 15px; font-weight: 600; background: var(--bg); }
 .who-list span small { color: var(--muted); font-weight: 500; margin-right: 4px; font-variant-numeric: tabular-nums; }
@@ -565,7 +570,7 @@ function openClass(id, sessionId) {
   const s = sessionId && db.sessions.find(x => x.id === sessionId);
   S.draft = s ? { id: s.id, dt: s.dt, absent: new Set(s.absent), memo: s.memo || "" }
               : { id: null, dt: nowDT(), absent: new Set(), memo: "" };
-  S.classId = id; S.view = "class"; S.dirty = false;
+  S.classId = id; S.view = "class"; S.dirty = false; S.filter = "all";
   const c = getClass(id); if (c && prefs.term !== c.term) { prefs.term = c.term; savePrefs(); }
   history.pushState({ v: "class" }, "");
   render();
@@ -605,12 +610,12 @@ function renderClass() {
         <label class="dt-field"><span class="label">수업 일시</span>
           <input type="datetime-local" id="dt" value="${d.dt.replace(" ", "T")}" step="60">
         </label>
-        <div class="tally" id="tally">${tallyHTML(enrolled.length, studs.length, absentN)}</div>
+        <div class="tally" id="tally"></div>
       </div>
       ${d.id ? `<div class="editing">저장된 기록을 고치는 중이에요</div>` : ""}
 
-      <div class="grid" id="grid">${studs.length ? studs.map(s => tileHTML(s, d.absent.has(s.id))).join("")
-        : `<p class="help">출석을 부를 학생이 없어요. 위쪽 <b>명단</b>에서 학생을 추가해 주세요.</p>`}</div>
+      <div class="filter-note" id="filter-note"></div>
+      <div class="grid" id="grid"></div>
       ${offList.length ? `<p class="excluded">출석을 부르지 않는 학생 ${offList.length}명 · ${offList.map(s => `${s.no ?? ""} ${esc(s.name)} <b>${esc(offAt(s, d.dt))}</b>`).join(", ")}</p>` : ""}
 
       <label class="memo-field"><span class="label">오늘 진도 (선택)</span>
@@ -622,6 +627,7 @@ function renderClass() {
       <button class="btn primary" data-act="save">${d.id ? "고친 내용 저장" : "출석 저장"}</button>
     </div></div>`;
 
+  drawGrid();
   document.getElementById("memo").oninput = e => { d.memo = e.target.value; S.dirty = true; };
   document.getElementById("dt").onchange = e => {
     if (!e.target.value) return;
@@ -629,34 +635,39 @@ function renderClass() {
     renderClass();
   };
 }
-const tallyHTML = (all, n, a) => `<button data-tally="all">재적 ${all}</button><button data-tally="present">출석 ${n - a}</button><button class="abs" data-tally="absent">결석 ${a}</button>${all > n ? `<button class="off" data-tally="off">제외 ${all - n}</button>` : ""}`;
-// 재적·출석·결석·제외를 누르면 해당 학생 보기
-function showTally(kind) {
-  const cls = getClass(S.classId), d = S.draft;
+const tallyHTML = (all, n, a) => {
+  const f = S.filter || "all", on = k => (f === k ? " sel" : "");
+  return `<button class="${on("all")}" data-tally="all" aria-pressed="${f === "all"}">재적 ${all}</button><button class="${on("present")}" data-tally="present" aria-pressed="${f === "present"}">출석 ${n - a}</button><button class="abs${on("absent")}" data-tally="absent" aria-pressed="${f === "absent"}">결석 ${a}</button>${all > n ? `<button class="off${on("off")}" data-tally="off" aria-pressed="${f === "off"}">제외 ${all - n}</button>` : ""}`;
+};
+// 재적·출석·결석·제외 버튼으로 학생 칸을 골라 보기 (같은 버튼을 다시 누르면 전체)
+function drawGrid() {
+  const cls = getClass(S.classId), d = S.draft, f = S.filter || "all";
   const all = activeAt(cls, d.dt), call = callAt(cls, d.dt);
-  const pick = {
-    all: ["재적", all],
-    present: ["출석", call.filter(s => !d.absent.has(s.id))],
-    absent: ["결석", call.filter(s => d.absent.has(s.id))],
-    off: ["출석 제외", all.filter(s => offAt(s, d.dt))]
-  }[kind];
-  const [title, list] = pick;
-  sheet(`<h2>${title} ${list.length}명</h2>
-    ${list.length ? `<div class="who-list">${list.map(s => `<span>${s.no != null ? `<small>${s.no}</small>` : ""}${esc(s.name)}${offAt(s, d.dt) ? `<em>${esc(offAt(s, d.dt))}</em>` : ""}</span>`).join("")}</div>` : `<p>해당하는 학생이 없어요.</p>`}
-    <button class="btn block" id="tl-x">닫기</button>`, (el, close) => { el.querySelector("#tl-x").onclick = close; });
+  const offs = all.filter(s => offAt(s, d.dt));
+  const absentN = call.filter(s => d.absent.has(s.id)).length;
+  document.getElementById("tally").innerHTML = tallyHTML(all.length, call.length, absentN);
+  let list, tiles;
+  if (f === "off") {
+    list = offs;
+    tiles = list.map(s => `<div class="tile off-tile"><span class="no">${s.no ?? ""}</span><span class="mark offm">${esc(offAt(s, d.dt))}</span><span class="name">${esc(s.name)}</span></div>`).join("");
+  } else {
+    list = f === "present" ? call.filter(s => !d.absent.has(s.id)) : f === "absent" ? call.filter(s => d.absent.has(s.id)) : call;
+    tiles = list.map(s => tileHTML(s, d.absent.has(s.id))).join("");
+  }
+  const label = { present: "출석", absent: "결석", off: "출석 제외" }[f];
+  document.getElementById("filter-note").innerHTML = label
+    ? `<span>${label} ${list.length}명만 보는 중</span><button class="btn small" data-tally="all">전체 보기</button>` : "";
+  document.getElementById("grid").innerHTML = list.length ? tiles
+    : `<p class="help">${f === "all" ? "출석을 부를 학생이 없어요. 위쪽 <b>명단수정</b>에서 학생을 추가해 주세요." : `${label} 학생이 없어요.`}</p>`;
 }
 const tileHTML = (s, absent) => `<button class="tile ${absent ? "absent" : ""}" data-sid="${s.id}" aria-pressed="${absent}">
   <span class="no">${s.no ?? ""}</span>${absent ? '<span class="mark">결석</span>' : ""}<span class="name">${esc(s.name)}</span></button>`;
 
 function toggle(sid) {
-  const d = S.draft; const cls = getClass(S.classId);
+  const d = S.draft;
   if (d.absent.has(sid)) { d.absent.delete(sid); buzz(15); } else { d.absent.add(sid); buzz([30, 40, 30]); }
   S.dirty = true;
-  const s = cls.students.find(x => x.id === sid);
-  const tile = document.querySelector(`[data-sid="${sid}"]`);
-  tile.outerHTML = tileHTML(s, d.absent.has(sid));
-  const studs = callAt(cls, d.dt);
-  document.getElementById("tally").innerHTML = tallyHTML(activeAt(cls, d.dt).length, studs.length, studs.filter(x => d.absent.has(x.id)).length);
+  drawGrid();
 }
 
 function saveSession() {
@@ -1852,11 +1863,11 @@ app.addEventListener("click", e => {
   if (t.dataset.sid) return toggle(t.dataset.sid);
   if (t.dataset.open) return openClass(t.dataset.open);
   if (t.dataset.stu) return openStudent(t.dataset.stu);
-  if (t.dataset.tally) return showTally(t.dataset.tally);
+  if (t.dataset.tally) { const k = t.dataset.tally; S.filter = S.filter === k || k === "all" ? "all" : k; return drawGrid(); }
   if (t.dataset.delclass) return deleteClass(getClass(t.dataset.delclass));
   if (t.dataset.rename) return renameClass(getClass(t.dataset.rename));
   if (t.dataset.edit) { S.view = "class"; const s = db.sessions.find(x => x.id === t.dataset.edit);
-    S.draft = { id: s.id, dt: s.dt, absent: new Set(s.absent), memo: s.memo || "" }; S.dirty = false; return render(); }
+    S.draft = { id: s.id, dt: s.dt, absent: new Set(s.absent), memo: s.memo || "" }; S.dirty = false; S.filter = "all"; return render(); }
   if (t.dataset.del) {
     const s = db.sessions.find(x => x.id === t.dataset.del);
     return ask({ title: `${prettyDT(s.dt)} 기록을 지울까요?`, body: "지운 기록은 되돌릴 수 없어요.",
@@ -1888,7 +1899,7 @@ app.addEventListener("click", e => {
       } else { S.view = "records"; render(); }
       break;
     case "to-class": case "new-session":
-      S.draft = { id: null, dt: nowDT(), absent: new Set(), memo: "" }; S.dirty = false; S.view = "class"; render(); break;
+      S.draft = { id: null, dt: nowDT(), absent: new Set(), memo: "" }; S.dirty = false; S.filter = "all"; S.view = "class"; render(); break;
     case "del-class":
       deleteClass(cls, () => { S.view = "home"; S.classId = null; history.back(); render(); });
       break;
