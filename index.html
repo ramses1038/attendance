@@ -1562,7 +1562,7 @@ function getToken(interactive) {
   });
   return new Promise((res, rej) => {
     waiters.push({ res, rej });
-    if (waiters.length === 1) tokenClient.requestAccessToken({ prompt: dprefs.connected ? "" : "consent" });
+    if (waiters.length === 1) tokenClient.requestAccessToken(Object.assign({ prompt: dprefs.connected ? "" : "consent" }, dprefs.email ? { login_hint: dprefs.email } : {}));
   });
 }
 async function gfetch(url, opts, interactive) {
@@ -1620,6 +1620,7 @@ function syncDrive(interactive) {
       const cur = termClasses();
       if (window.XLSX && cur.length) await upsert(sheetNameOf(S.term), GSHEET_MIME, exportFile(cur).blob, "sheet_" + S.term, interactive);
       dprefs.lastSync = nowDT(); dprefs.pending = false; dprefs.lastError = ""; savePrefs();
+      if (!dprefs.email) rememberEmail();
       return true;
     } catch (e) {
       dprefs.pending = true; dprefs.lastError = isAuthErr(e) ? "auth" : "net"; savePrefs();
@@ -1652,10 +1653,14 @@ function driveError(e) {
   else toast("드라이브에 연결하지 못했어요. 잠시 뒤 다시 해 주세요.");
 }
 
+async function rememberEmail() {
+  try { const j = await gjson("https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)", {}, true); if (j.user && j.user.emailAddress) { dprefs.email = j.user.emailAddress; savePrefs(); } } catch (e) {}
+}
 async function connectDrive() {
   try {
     await getToken(true);
     dprefs.connected = true; savePrefs();
+    await rememberEmail();
     await ensureFolder(true);
     const b = await findInFolder(BACKUP_NAME, true);
     if (b && !db.classes.length) {
@@ -1781,8 +1786,9 @@ function openDriveSettings() {
     : syncing ? "백업하는 중이에요"
     : dprefs.pending ? "백업을 기다리는 중이에요"
     : dprefs.lastSync ? `마지막 백업 ${prettyDT(dprefs.lastSync)}` : "연결됨";
+  const who = c && dprefs.email ? `<p class="help">연결된 계정: <b>${esc(dprefs.email)}</b></p>` : "";
   sheet(`<h2>구글 드라이브 백업</h2>
-    <div class="drive-status ${state}"><span class="dot"></span><span>${msg}</span></div>
+    <div class="drive-status ${state}"><span class="dot"></span><span>${msg}</span></div>${who}
     <p>출석을 저장할 때마다 내 드라이브의 <b>'${FOLDER_NAME}'</b> 폴더에 백업 파일과 학기별 출석부 구글 시트('${sheetNameOf(S.term)}' 등)를 자동으로 저장해요. 이 앱이 만든 파일만 다루고, 드라이브의 다른 파일은 보지 않아요.</p>
     <div class="acts">
       ${c ? `
