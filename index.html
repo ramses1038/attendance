@@ -1158,7 +1158,8 @@ async function prepImage(blob) {
     const d = g.getImageData(0, 0, w, h), p = d.data;
     let lo = 255, hi = 0;
     for (let i = 0; i < p.length; i += 16) { const v = p[i] * .3 + p[i + 1] * .59 + p[i + 2] * .11; if (v < lo) lo = v; if (v > hi) hi = v; }
-    const span = Math.max(40, hi - lo);
+    if (hi - lo < 40) { lo = 0; hi = 255; } // 대비가 거의 없으면 늘리지 않음
+    const span = hi - lo;
     for (let i = 0; i < p.length; i += 4) {
       let v = (p[i] * .3 + p[i + 1] * .59 + p[i + 2] * .11 - lo) * 255 / span;
       v = v < 0 ? 0 : v > 255 ? 255 : v;
@@ -1211,6 +1212,38 @@ function parseOcrText(text) {
   });
   return rows;
 }
+// 제목 줄(학년·반·번호·이름)의 가로 위치로 칸을 나눠 읽음 — 빈 칸이 있어도 칸이 밀리지 않음
+function parseOcrLayout(data) {
+  const lines = (data && data.lines) || [];
+  const cx = w => (w.bbox.x0 + w.bbox.x1) / 2;
+  let col = null, hi = -1;
+  for (let i = 0; i < lines.length && i < 8; i++) {
+    const c = {};
+    lines[i].words.forEach(w => {
+      const t = w.text.replace(/\s+/g, "");
+      if (/학년/.test(t)) c.grade = cx(w);
+      else if (/번호|^번$/.test(t)) c.no = cx(w);
+      else if (/이름|성명/.test(t)) c.name = cx(w);
+      else if (/반/.test(t)) c.cls = cx(w);
+    });
+    if (c.name != null && Object.keys(c).length >= 2) { col = c; hi = i; break; }
+  }
+  if (!col) return null;
+  const keys = Object.keys(col);
+  const nearest = x => keys.reduce((b, k) => Math.abs(col[k] - x) < Math.abs(col[b] - x) ? k : b, keys[0]);
+  const rows = [];
+  lines.slice(hi + 1).forEach((ln, i) => {
+    const cell = {};
+    ln.words.forEach(w => { const t = w.text.trim(); if (!t) return; const k = nearest(cx(w)); cell[k] = (cell[k] || "") + t; });
+    const name = (cell.name || "").replace(/[^가-힣A-Za-z]/g, "");
+    let cls = (cell.cls || "").replace(/[|ㅣ。.,:;]/g, "").replace(/\^/g, "A").replace(/반$/, "");
+    const grade = digits(cell.grade), no = digits(cell.no);
+    if (!name && grade == null && !cls && no == null) return;
+    if (NOT_NAME.test(name)) return;
+    rows.push({ grade, cls, no, name, line: hi + i + 2 });
+  });
+  return rows;
+}
 async function runOcr(blob) {
   let closeWait;
   const setMsg = t => { const m = document.getElementById("ocr-msg"); if (m) m.textContent = t; };
@@ -1227,7 +1260,7 @@ async function runOcr(blob) {
     });
     const { data } = await w.recognize(canvas);
     closeWait();
-    const rows = parseOcrText(data.text || "");
+    const rows = parseOcrLayout(data) || parseOcrText(data.text || "");
     if (!rows.length) {
       return ask({ title: "명단을 읽지 못했어요", body: `사진에서 학생 이름을 찾지 못했어요. 표가 사진에 꽉 차고 글자가 선명한지 확인해 주세요. 모니터를 찍은 사진보다 <b>화면 캡처</b>나 인쇄물을 찍은 사진이 훨씬 잘 읽혀요.${FORMAT_HTML}`,
         actions: [{ label: "다른 사진 고르기", cls: "primary", fn: pickPhoto }, { label: "표에 직접 입력하기", fn: () => openRowEditor([], "새 반", "명단 직접 입력") }, { label: "닫기" }] });
