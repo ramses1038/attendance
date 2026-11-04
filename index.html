@@ -446,7 +446,7 @@ function renderHome() {
   if (!classes.length) {
     body = `<div class="empty">
       <h2>${termLabel(S.term)}에 아직 반이 없어요</h2>
-      <p><b>학년, 반, 번호, 이름</b> 순서의 표를 구글 드라이브나 갤러리 사진에서 고르거나 직접 입력하면 반이 만들어져요. 학년과 반이 있으면 여러 반을 한 번에 만들어요.</p>
+      <p><b>학년, 반, 번호, 이름</b> 순서의 표를 구글 드라이브에서 고르거나, 명렬표 스크린샷을 고르거나, 직접 입력하면 반이 만들어져요. 학년과 반이 있으면 여러 반을 한 번에 만들어요.</p>
       <div class="btns">
         <button class="btn primary" data-act="import">${ICON.upload}명단 올리기</button>
         ${db.classes.length ? "" : `<button class="btn" data-act="demo">예시 반으로 둘러보기</button>`}
@@ -1250,10 +1250,10 @@ function parseOcrLayout(data) {
 async function runOcr(blob) {
   let closeWait;
   const setMsg = t => { const m = document.getElementById("ocr-msg"); if (m) m.textContent = t; };
-  sheet(`<h2>명단 사진을 읽는 중이에요</h2>
+  sheet(`<h2>명렬표 스크린샷을 읽는 중이에요</h2>
     <p id="ocr-msg">글자 인식 도구를 준비하고 있어요. 처음 한 번은 1분쯤 걸릴 수 있어요.</p>
     <div class="ocr-bar"><span id="ocr-bar"></span></div>
-    <p class="help">사진은 이 폰 안에서만 처리되고 밖으로 보내지 않아요.</p>`, (el, close) => { closeWait = close; });
+    <p class="help">스크린샷은 이 폰 안에서만 처리되고 밖으로 보내지 않아요.</p>`, (el, close) => { closeWait = close; });
   const bar = p => { const b = document.getElementById("ocr-bar"); if (b) b.style.width = Math.round(p * 100) + "%"; };
   try {
     const canvas = await prepImage(blob);
@@ -1265,13 +1265,13 @@ async function runOcr(blob) {
     closeWait();
     const rows = parseOcrLayout(data) || parseOcrText(data.text || "");
     if (!rows.length) {
-      return ask({ title: "명단을 읽지 못했어요", body: `사진에서 학생 이름을 찾지 못했어요. 표가 사진에 꽉 차고 글자가 선명한지 확인해 주세요. 모니터를 찍은 사진보다 <b>화면 캡처</b>나 인쇄물을 찍은 사진이 훨씬 잘 읽혀요.${FORMAT_HTML}`,
-        actions: [{ label: "다른 사진 고르기", cls: "primary", fn: pickPhoto }, { label: "표에 직접 입력하기", fn: () => openRowEditor([], "새 반", "명단 직접 입력") }, { label: "닫기" }] });
+      return ask({ title: "명단을 읽지 못했어요", body: `스크린샷에서 학생 이름을 찾지 못했어요. 명렬표의 <b>학년·반·번호·이름 제목 줄</b>까지 함께 나오게 캡처해 주세요. 표만 화면에 크게 나오게 캡처하면 더 잘 읽혀요. 모니터를 폰 카메라로 찍은 사진은 잘 읽히지 않아요.${FORMAT_HTML}`,
+        actions: [{ label: "다른 스크린샷 고르기", cls: "primary", fn: pickPhoto }, { label: "표에 직접 입력하기", fn: () => openRowEditor([], "새 반", "명단 직접 입력") }, { label: "닫기" }] });
     }
-    openRowEditor(rows, "사진 명단", `사진에서 ${rows.length}명을 읽었어요`);
+    openRowEditor(rows, "새 반", `스크린샷에서 ${rows.length}명을 읽었어요`);
   } catch (e) {
     if (closeWait) closeWait();
-    ask({ title: "사진을 읽지 못했어요", body: "처음 사용할 때는 글자 인식 도구를 내려받아야 해서 인터넷 연결이 필요해요. 연결을 확인하고 다시 해 주세요.", actions: [{ label: "확인", cls: "primary" }] });
+    ask({ title: "스크린샷을 읽지 못했어요", body: "처음 사용할 때는 글자 인식 도구를 내려받아야 해서 인터넷 연결이 필요해요. 연결을 확인하고 다시 해 주세요.", actions: [{ label: "확인", cls: "primary" }] });
   }
 }
 function pickPhoto() { document.getElementById("photo").click(); }
@@ -1666,11 +1666,11 @@ async function pickFromDrive() {
 function openImportChoice() {
   const drive = driveConfigured() && DRIVE.apiKey;
   sheet(`<h2>명단 올리기</h2>
-    <p>아래 양식의 표를 구글 드라이브에서 고르거나, 표를 찍은 사진을 골라 주세요.</p>
+    <p>아래 양식의 표를 구글 드라이브에서 고르거나, 명렬표를 화면 캡처한 <b>스크린샷</b>을 갤러리에서 골라 주세요.</p>
     ${FORMAT_HTML}
     <div class="acts">
       ${drive ? `<button class="btn primary block" id="im-drive">${ICON.drive}구글 드라이브에서 고르기</button>` : ""}
-      <button class="btn ${drive ? "" : "primary"} block" id="im-photo">${ICON.image}갤러리에서 명단 사진 고르기</button>
+      <button class="btn ${drive ? "" : "primary"} block" id="im-photo">${ICON.image}갤러리에서 명렬표 스크린샷 고르기</button>
       <button class="btn block" id="im-type">표에 직접 입력하기</button>
       <button class="btn block" id="im-cancel">취소</button>
     </div>`, (el, close) => {

@@ -1,5 +1,5 @@
 // 오프라인 캐시: 앱 파일은 저장해 두고, 인터넷이 되면 새 버전으로 갱신
-const CACHE = "attendance-v24";
+const CACHE = "attendance-v25";
 const CORE = ["./", "./index.html", "./xlsx.full.min.js", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", e => {
