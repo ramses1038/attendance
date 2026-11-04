@@ -325,9 +325,6 @@ main.wrap { padding-block: 16px 140px; display: flex; flex-direction: column; ga
 </head>
 <body>
 <div id="app"></div>
-<input type="file" id="file" accept=".xlsx,.xls,.csv" hidden>
-<input type="file" id="photo" accept="image/*" hidden>
-<input type="file" id="cam" accept="image/*" capture="environment" hidden>
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script>
@@ -438,7 +435,7 @@ function renderHome() {
   if (!classes.length) {
     body = `<div class="empty">
       <h2>엑셀 명단을 올리면 반이 만들어져요</h2>
-      <p><b>학년, 반, 번호, 이름</b> 순서의 표를 엑셀·구글 시트·사진으로 올리면 됩니다. 학년과 반이 있으면 여러 반을 한 번에 만들어요.</p>
+      <p><b>학년, 반, 번호, 이름</b> 순서의 표를 구글 드라이브에서 고르거나 직접 입력하면 됩니다. 학년과 반이 있으면 여러 반을 한 번에 만들어요.</p>
       <div class="btns">
         <button class="btn primary" data-act="import">${ICON.upload}명단 올리기</button>
         <button class="btn" data-act="demo">예시 반으로 둘러보기</button>
@@ -941,11 +938,11 @@ function renderRecords() {
 const norm = s => String(s ?? "").replace(/\s+/g, "").trim();
 const NAME_H = /^(이름|성명|학생명|학생이름|학생성명)$/;
 const NO_H = /^(번호|번|출석번호|no\.?)$/i;
-const CLS_H = /^(반|학급|분반|학반|반명|수업반)$/;
+const CLS_H = /^(반|학급|분반|학반|반명|수업반|선택반|반이름)$/;
 const GRADE_H = /^(학년)$/;
 const ID_H = /^학번$/;
-const FORMAT_HTML = `<table class="fmt"><tr><th>학년</th><th>반</th><th>번호</th><th>이름</th></tr><tr><td>3</td><td>2</td><td>1</td><td>김민성</td></tr><tr><td>3</td><td>2</td><td>2</td><td>노수진</td></tr></table>
-  <p class="help">첫 줄에 <b>학년, 반, 번호, 이름</b> 제목을 넣은 표가 가장 정확해요. 학년·반·번호는 없으면 빼도 되지만 <b>이름은 꼭 있어야</b> 해요. 학년과 반이 있으면 '3학년 2반'처럼 반이 자동으로 나뉘어요.</p>`;
+const FORMAT_HTML = `<table class="fmt"><tr><th>학년</th><th>반</th><th>번호</th><th>이름</th></tr><tr><td>3</td><td>2</td><td>1</td><td>김민성</td></tr><tr><td>3</td><td>A</td><td>2</td><td>노수진</td></tr></table>
+  <p class="help">첫 줄에 <b>학년, 반, 번호, 이름</b> 제목을 넣은 표가 가장 정확해요. 학년·반·번호는 없으면 빼도 되지만 <b>이름은 꼭 있어야</b> 해요. 반에는 숫자뿐 아니라 <b>A, B, 가, 나</b> 같은 선택반 이름도 쓸 수 있고, '3학년 2반', '3학년 A반'처럼 반이 자동으로 나뉘어요.</p>`;
 const digits = v => { const m = String(v ?? "").match(/\d+/); return m ? parseInt(m[0], 10) : null; };
 const cellText = v => String(v ?? "").trim();
 
@@ -1001,8 +998,15 @@ function numsToRow(nums, name, line, cols) {
   else { const v = n[0]; row.no = v >= 1000 ? v % 100 : v; }
   return row;
 }
+// 반 이름: 3 → 3반, A → A반, 가 → 가반, 이미 '반'이 붙었거나 긴 이름(화작A 등)은 그대로
+const clsLabel = v => {
+  const c = String(v ?? "").trim();
+  if (!c) return "";
+  if (/반$/.test(c)) return c;
+  return /^[0-9A-Za-z가-힣]{1,2}$/.test(c) ? c + "반" : c;
+};
 const className = (r, def) => {
-  const c = r.cls ? (/^\d+$/.test(r.cls) ? r.cls + "반" : r.cls) : "";
+  const c = clsLabel(r.cls);
   return r.grade != null && c ? `${r.grade}학년 ${c}` : c || (r.grade != null ? `${r.grade}학년` : def);
 };
 // 줄 목록 → 반별로 묶기
@@ -1028,7 +1032,6 @@ function parseWorkbook(wb, fileName) {
   return all;
 }
 
-async function handleFile(file) { return handleBuffer(await file.arrayBuffer(), file.name, file); }
 function fileKind(buf) {
   const h = new Uint8Array(buf.slice(0, 12));
   if (h[0] === 0xFF && h[1] === 0xD8) return "image";
@@ -1038,11 +1041,11 @@ function fileKind(buf) {
   if (h[0] === 0x25 && h[1] === 0x50 && h[2] === 0x44 && h[3] === 0x46) return "pdf";
   return "sheet";
 }
-function handleBuffer(buf, fileName, file) {
+function handleBuffer(buf, fileName) {
   const kind = fileKind(buf);
-  if (kind === "image") return runOcr(file || new Blob([buf]));
+  if (kind === "image") return ask({ title: "사진은 읽을 수 없어요", body: "학년·반·번호·이름 표가 들어 있는 <b>구글 시트나 엑셀 파일</b>을 골라 주세요.", actions: [{ label: "확인", cls: "primary" }] });
   if (!window.XLSX) { toast("엑셀 도구를 불러오지 못했어요. 인터넷 연결을 확인해 주세요."); return; }
-  if (kind === "pdf") return ask({ title: "엑셀이 아니라 PDF로 받아졌어요", body: "구글 시트 파일을 휴대폰 파일 선택 창에서 고르면 PDF로 넘어올 수 있어요. <b>명단 올리기 → 구글 드라이브에서 고르기</b>를 쓰거나, 구글 시트에서 <b>파일 → 다운로드 → Microsoft Excel(.xlsx)</b>로 받은 파일을 골라 주세요.", actions: [{ label: "확인", cls: "primary" }] });
+  if (kind === "pdf") return ask({ title: "엑셀이 아니라 PDF로 받아졌어요", body: "구글 시트 파일을 휴대폰 파일 선택 창에서 고르면 PDF로 넘어올 수 있어요. 구글 시트 원본이나 엑셀(.xlsx) 파일을 다시 골라 주세요.", actions: [{ label: "확인", cls: "primary" }] });
   let rows;
   try { rows = parseWorkbook(XLSX.read(buf, { type: "array" }), fileName); }
   catch (e) { return ask({ title: "파일을 열지 못했어요", body: "엑셀(.xlsx, .xls), CSV 또는 구글 시트인지 확인해 주세요.", actions: [{ label: "확인", cls: "primary" }] }); }
@@ -1127,96 +1130,6 @@ function openRowEditor(rows, def, title) {
       showImportPreview(groupByDef(list.map(r => ({ grade: digits(r.grade), cls: cellText(r.cls).replace(/반$/, ""), no: digits(r.no), name: r.name, def: r.def }))));
     };
   });
-}
-
-/* ---------- 명단 사진 인식 (폰 안에서 처리) ---------- */
-function loadScript(src) {
-  return new Promise((res, rej) => { const s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = rej; document.head.appendChild(s); });
-}
-let ocrWorker = null;
-async function getOcr(onProgress) {
-  if (!window.Tesseract) await loadScript("https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js");
-  if (!ocrWorker) {
-    ocrWorker = await Tesseract.createWorker(["kor", "eng"], 1, { logger: m => onProgress && onProgress(m) });
-    await ocrWorker.setParameters({ tessedit_pageseg_mode: "4", preserve_interword_spaces: "1" });
-  }
-  return ocrWorker;
-}
-// 크기를 맞추고 흑백·대비를 높여 글자를 잘 보이게
-async function prepImage(blob) {
-  const url = URL.createObjectURL(blob);
-  try {
-    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
-    const scale = Math.min(2, 2000 / Math.max(img.width, img.height));
-    const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
-    const c = document.createElement("canvas"); c.width = w; c.height = h;
-    const g = c.getContext("2d"); g.drawImage(img, 0, 0, w, h);
-    const d = g.getImageData(0, 0, w, h), p = d.data;
-    let lo = 255, hi = 0;
-    for (let i = 0; i < p.length; i += 16) { const v = p[i] * .3 + p[i + 1] * .59 + p[i + 2] * .11; if (v < lo) lo = v; if (v > hi) hi = v; }
-    const span = Math.max(40, hi - lo);
-    for (let i = 0; i < p.length; i += 4) {
-      let v = (p[i] * .3 + p[i + 1] * .59 + p[i + 2] * .11 - lo) * 255 / span;
-      v = v < 0 ? 0 : v > 255 ? 255 : v;
-      p[i] = p[i + 1] = p[i + 2] = v;
-    }
-    g.putImageData(d, 0, 0);
-    return c;
-  } finally { URL.revokeObjectURL(url); }
-}
-const NOT_NAME = /^(학년|번호|이름|성명|명단|출석부|학생|비고|합계)$/;
-function parseOcrText(text) {
-  const rows = []; let cols = null, afterHeader = false;
-  text.split("\n").forEach((raw, i) => {
-    const line = raw.trim(); if (!line) return;
-    const compact = line.replace(/\s+/g, "");
-    if (/(이름|성명)/.test(compact) && (/(학년|번호)/.test(compact) || /반/.test(compact.replace(/학년/g, "")))) {
-      cols = [];
-      if (/학년/.test(compact)) cols.push("grade");
-      if (/반/.test(compact.replace(/학년/g, ""))) cols.push("cls");
-      if (/번호|번/.test(compact.replace(/반/g, ""))) cols.push("no");
-      afterHeader = true; return;
-    }
-    const names = (line.match(/[가-힣]{2,5}/g) || []).filter(n => !NOT_NAME.test(n));
-    const name = names.length ? names[names.length - 1] : "";
-    const before = name ? line.slice(0, line.lastIndexOf(name)) : line;
-    const nums = (before.match(/\d+/g) || []).map(Number);
-    if (!name && !(afterHeader && nums.length)) return;
-    if (!name && !nums.length) return;
-    rows.push(numsToRow(cols && cols.length ? nums.slice(-cols.length) : nums, name, i + 1, cols));
-  });
-  return rows;
-}
-async function runOcr(blob) {
-  let closeWait;
-  const setMsg = t => { const m = document.getElementById("ocr-msg"); if (m) m.textContent = t; };
-  sheet(`<h2>명단 사진을 읽는 중이에요</h2>
-    <p id="ocr-msg">글자 인식 도구를 준비하고 있어요. 처음 한 번은 1분쯤 걸릴 수 있어요.</p>
-    <div class="ocr-bar"><span id="ocr-bar"></span></div>
-    <p class="help">사진은 이 폰 안에서만 처리되고 밖으로 보내지 않아요.</p>`, (el, close) => { closeWait = close; });
-  const bar = p => { const b = document.getElementById("ocr-bar"); if (b) b.style.width = Math.round(p * 100) + "%"; };
-  try {
-    const canvas = await prepImage(blob);
-    const w = await getOcr(m => {
-      if (m.status === "recognizing text") { setMsg("글자를 읽고 있어요"); bar(.3 + m.progress * .7); }
-      else if (/load|initializ/.test(m.status)) { setMsg("글자 인식 도구를 준비하고 있어요"); bar((m.progress || 0) * .3); }
-    });
-    const { data } = await w.recognize(canvas);
-    closeWait();
-    const rows = parseOcrText(data.text || "");
-    if (!rows.length) {
-      return ask({ title: "명단을 읽지 못했어요", body: `사진에서 학생 이름을 찾지 못했어요. 표가 화면에 꽉 차게, 밝고 흔들리지 않게 찍어 주세요. 모니터 화면을 찍은 사진보다 <b>화면 캡처</b>나 <b>인쇄물</b>이 훨씬 잘 읽혀요.${FORMAT_HTML}`,
-        actions: [{ label: "다시 찍기", cls: "primary", fn: () => pickPhoto(true) }, { label: "표에 직접 입력하기", fn: () => openRowEditor([], "새 반", "명단 직접 입력") }, { label: "닫기" }] });
-    }
-    openRowEditor(rows, "사진 명단", `사진에서 ${rows.length}명을 읽었어요`);
-  } catch (e) {
-    if (closeWait) closeWait();
-    ask({ title: "사진을 읽지 못했어요", body: "처음 사용할 때는 글자 인식 도구를 내려받아야 해서 인터넷 연결이 필요해요. 연결을 확인하고 다시 해 주세요.", actions: [{ label: "확인", cls: "primary" }] });
-  }
-}
-function pickPhoto(camera) {
-  const i = document.getElementById(camera ? "cam" : "photo");
-  i.click();
 }
 
 function showImportPreview(groups) {
@@ -1578,7 +1491,7 @@ async function pickFromDrive() {
   catch (e) { return driveError(e); }
   if (!dprefs.connected) { dprefs.connected = true; savePrefs(); }
   const view = new google.picker.DocsView(google.picker.ViewId.DOCS)
-    .setMimeTypes([XLSX_MIME, "application/vnd.ms-excel", "text/csv", "application/vnd.google-apps.spreadsheet", "image/jpeg", "image/png", "image/webp"].join(","))
+    .setMimeTypes([XLSX_MIME, "application/vnd.ms-excel", "text/csv", "application/vnd.google-apps.spreadsheet"].join(","))
     .setMode(google.picker.DocsViewMode.LIST);
   new google.picker.PickerBuilder()
     .addView(view).setOAuthToken(t).setDeveloperKey(DRIVE.apiKey).setAppId(DRIVE.appId)
@@ -1600,21 +1513,15 @@ async function pickFromDrive() {
 function openImportChoice() {
   const drive = driveConfigured() && DRIVE.apiKey;
   sheet(`<h2>명단 올리기</h2>
-    <p>아래 양식의 표를 엑셀, 구글 시트, 사진 중 편한 것으로 올려 주세요.</p>
+    <p>구글 드라이브에 아래 양식의 구글 시트나 엑셀 파일을 올려 두고 골라 주세요.</p>
     ${FORMAT_HTML}
     <div class="acts">
       ${drive ? `<button class="btn primary block" id="im-drive">${ICON.drive}구글 드라이브에서 고르기</button>` : ""}
-      <button class="btn ${drive ? "" : "primary"} block" id="im-file">${ICON.upload}이 폰에 있는 엑셀 파일</button>
-      <button class="btn block" id="im-cam">${ICON.camera}명단 사진 찍기</button>
-      <button class="btn block" id="im-photo">${ICON.image}갤러리에서 명단 사진 고르기</button>
-      <button class="btn block" id="im-type">표에 직접 입력하기</button>
+      <button class="btn ${drive ? "" : "primary"} block" id="im-type">표에 직접 입력하기</button>
       <button class="btn block" id="im-cancel">취소</button>
     </div>`, (el, close) => {
     const on = (id, fn) => { const b = el.querySelector(id); if (b) b.onclick = () => { close(); fn(); }; };
     on("#im-drive", pickFromDrive);
-    on("#im-file", () => document.getElementById("file").click());
-    on("#im-cam", () => pickPhoto(true));
-    on("#im-photo", () => pickPhoto(false));
     on("#im-type", () => openRowEditor([{ grade: "", cls: "", no: 1, name: "" }], "새 반", "명단 직접 입력"));
     on("#im-cancel", () => {});
   });
@@ -1726,10 +1633,7 @@ app.addEventListener("click", e => {
   }
 });
 
-["file", "photo", "cam"].forEach(id => document.getElementById(id).addEventListener("change", e => {
-  const f = e.target.files[0]; e.target.value = "";
-  if (f) handleFile(f);
-}));
+
 
 // 휴대폰 뒤로 가기
 window.addEventListener("popstate", () => {
