@@ -34,6 +34,8 @@
   --absent: #C2412F;
   --absent-bg: #FBE6E2;
   --absent-ink: #8E2A1D;
+  --off-bg: #F1EADC;
+  --off-ink: #74521A;
   --shadow: 0 1px 2px rgba(24,38,58,.06), 0 4px 14px rgba(24,38,58,.06);
   --display: "Do Hyeon", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
   --body: "IBM Plex Sans KR", -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
@@ -44,7 +46,7 @@
   :root:not([data-theme="light"]) {
     --bg: #0F1620; --surface: #18222F; --ink: #E6EBF2; --muted: #93A1B3; --line: #2A3646;
     --accent: #84B2E3; --accent-ink: #0F1620; --accent-soft: #1F3246;
-    --absent: #FF8C7C; --absent-bg: #3B2020; --absent-ink: #FFC4BA;
+    --absent: #FF8C7C; --absent-bg: #3B2020; --absent-ink: #FFC4BA; --off-bg: #362D1E; --off-ink: #EBCB8C;
     --shadow: 0 1px 2px rgba(0,0,0,.3);
     color-scheme: dark;
   }
@@ -52,7 +54,7 @@
 :root[data-theme="dark"] {
   --bg: #0F1620; --surface: #18222F; --ink: #E6EBF2; --muted: #93A1B3; --line: #2A3646;
   --accent: #84B2E3; --accent-ink: #0F1620; --accent-soft: #1F3246;
-  --absent: #FF8C7C; --absent-bg: #3B2020; --absent-ink: #FFC4BA;
+  --absent: #FF8C7C; --absent-bg: #3B2020; --absent-ink: #FFC4BA; --off-bg: #362D1E; --off-ink: #EBCB8C;
   --shadow: 0 1px 2px rgba(0,0,0,.3);
   color-scheme: dark;
 }
@@ -276,6 +278,23 @@ main.wrap { padding-block: 16px 140px; display: flex; flex-direction: column; ga
 .sync-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--muted); }
 .sync-line .btn { min-height: 36px; padding: 0 12px; font-size: 13px; }
 .sheet a.btn { text-decoration: none; }
+.tally .off { background: var(--off-bg); color: var(--off-ink); border-color: transparent; }
+.excluded { font-size: 13px; color: var(--muted); }
+.excluded b { color: var(--off-ink); font-weight: 600; }
+.roster { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); overflow: hidden; }
+.srow { display: grid; grid-template-columns: 34px 1fr auto 20px; align-items: center; gap: 8px; min-height: 54px; padding: 0 12px; border: 0; border-bottom: 1px solid var(--line); background: transparent; text-align: left; color: var(--ink); }
+.srow:last-child { border-bottom: 0; }
+.srow .no { color: var(--muted); font-variant-numeric: tabular-nums; }
+.srow .nm { font-weight: 600; font-size: 16px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.srow .chev { color: var(--muted); display: flex; }
+.srow.gone .nm { color: var(--muted); }
+.pill { font-size: 12px; font-weight: 600; border-radius: 999px; padding: 3px 9px; background: var(--off-bg); color: var(--off-ink); white-space: nowrap; }
+.pill.gone { background: var(--bg); color: var(--muted); }
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field input { min-height: 46px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 10px; padding: 0 10px; font-weight: 600; width: 100%; font-size: 16px; }
+.field.no-f { width: 84px; flex: none; }
+.field.grow { flex: 1; min-width: 0; }
+.seg4 { grid-template-columns: 1fr 1fr; }
 .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: var(--bg); border-radius: 12px; padding: 4px; }
 .seg button { border: 0; background: transparent; border-radius: 9px; min-height: 48px; font-weight: 600; font-size: 16px; color: var(--muted); }
 .seg button.on { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
@@ -337,6 +356,11 @@ const classSessions = id => db.sessions.filter(s => s.classId === id).sort((a, b
 const activeAt = (cls, dt) => cls.students
   .filter(s => (!s.addedAt || s.addedAt <= dt) && (!s.leftAt || s.leftAt > dt))
   .sort(byNo);
+// 출석 제외(위탁·수능 준비반 등) 기간: off = [{ from, to, reason }]
+const offAt = (s, dt) => { const p = (s.off || []).find(p => p.from <= dt && (!p.to || p.to > dt)); return p ? p.reason : null; };
+const offNow = s => { const p = (s.off || []).find(p => !p.to); return p ? p.reason : null; };
+// 그 수업 시각에 실제로 출석을 부르는 학생
+const callAt = (cls, dt) => activeAt(cls, dt).filter(s => !offAt(s, dt));
 function buzz(ms) { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) {} }
 
 const ICON = {
@@ -347,6 +371,7 @@ const ICON = {
   list: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>',
   gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
   drive: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M8.5 3h7l6 10.5-3.5 6h-12L2.5 13.5z"/><path d="M8.5 3l6 10.5h7"/><path d="M6 19.5l6-10"/></svg>',
+  people: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8"/><path d="M18.5 14.3A6.5 6.5 0 0 1 21.5 20"/></svg>',
   voice: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>'
 };
 
@@ -383,6 +408,7 @@ function render() {
   if (S.view === "home") renderHome();
   else if (S.view === "class") renderClass();
   else if (S.view === "records") renderRecords();
+  else if (S.view === "roster") renderRoster();
   window.scrollTo(0, 0);
 }
 
@@ -447,13 +473,16 @@ function renderClass() {
   const cls = getClass(S.classId);
   if (!cls) { S.view = "home"; return render(); }
   const d = S.draft;
-  const studs = activeAt(cls, d.dt);
+  const enrolled = activeAt(cls, d.dt);
+  const studs = callAt(cls, d.dt);
+  const offList = enrolled.filter(s => offAt(s, d.dt));
   const absentN = studs.filter(s => d.absent.has(s.id)).length;
   const pm = prevMemo(cls);
   app.innerHTML = `
     <header class="bar"><div class="wrap">
       <button class="icon-btn" data-act="back" aria-label="반 목록으로">${ICON.back}</button>
       <h1>${esc(cls.name)}</h1>
+      <button class="icon-btn" data-act="roster">${ICON.people}명단</button>
       <button class="icon-btn" data-act="records">${ICON.list}기록</button>
     </div></header>
     <main class="wrap">
@@ -467,12 +496,13 @@ function renderClass() {
         <label class="dt-field"><span class="label">수업 일시</span>
           <input type="datetime-local" id="dt" value="${d.dt.replace(" ", "T")}" step="60">
         </label>
-        <div class="tally" id="tally">${tallyHTML(studs.length, absentN)}</div>
+        <div class="tally" id="tally">${tallyHTML(enrolled.length, studs.length, absentN)}</div>
       </div>
       ${d.id ? `<div class="editing">저장된 기록을 고치는 중이에요</div>` : ""}
 
       <div class="grid" id="grid">${studs.length ? studs.map(s => tileHTML(s, d.absent.has(s.id))).join("")
-        : `<p class="help">이 반에 학생이 없어요.</p>`}</div>
+        : `<p class="help">출석을 부를 학생이 없어요. 위쪽 <b>명단</b>에서 학생을 추가해 주세요.</p>`}</div>
+      ${offList.length ? `<p class="excluded">출석을 부르지 않는 학생 ${offList.length}명 · ${offList.map(s => `${s.no ?? ""} ${esc(s.name)} <b>${esc(offAt(s, d.dt))}</b>`).join(", ")}</p>` : ""}
 
       <label class="memo-field"><span class="label">오늘 진도 (선택)</span>
         <textarea id="memo" placeholder="예: 2단원 매체 언어의 특성, 활동지 3번까지">${esc(d.memo)}</textarea>
@@ -490,7 +520,7 @@ function renderClass() {
     renderClass();
   };
 }
-const tallyHTML = (n, a) => `<span>재적 ${n}</span><span>출석 ${n - a}</span><span class="abs">결석 ${a}</span>`;
+const tallyHTML = (all, n, a) => `<span>재적 ${all}</span><span>출석 ${n - a}</span><span class="abs">결석 ${a}</span>${all > n ? `<span class="off">제외 ${all - n}</span>` : ""}`;
 const tileHTML = (s, absent) => `<button class="tile ${absent ? "absent" : ""}" data-sid="${s.id}" aria-pressed="${absent}">
   <span class="no">${s.no ?? ""}</span>${absent ? '<span class="mark">결석</span>' : ""}<span class="name">${esc(s.name)}</span></button>`;
 
@@ -501,13 +531,13 @@ function toggle(sid) {
   const s = cls.students.find(x => x.id === sid);
   const tile = document.querySelector(`[data-sid="${sid}"]`);
   tile.outerHTML = tileHTML(s, d.absent.has(sid));
-  const studs = activeAt(cls, d.dt);
-  document.getElementById("tally").innerHTML = tallyHTML(studs.length, studs.filter(x => d.absent.has(x.id)).length);
+  const studs = callAt(cls, d.dt);
+  document.getElementById("tally").innerHTML = tallyHTML(activeAt(cls, d.dt).length, studs.length, studs.filter(x => d.absent.has(x.id)).length);
 }
 
 function saveSession() {
   const d = S.draft; const cls = getClass(S.classId);
-  const ids = new Set(activeAt(cls, d.dt).map(s => s.id));
+  const ids = new Set(callAt(cls, d.dt).map(s => s.id));
   const rec = { id: d.id || uid(), classId: cls.id, dt: d.dt, absent: [...d.absent].filter(id => ids.has(id)), memo: d.memo.trim() };
   const i = db.sessions.findIndex(s => s.id === rec.id);
   if (i >= 0) db.sessions[i] = rec; else db.sessions.push(rec);
@@ -633,7 +663,7 @@ async function keepAwake() {
 document.addEventListener("visibilitychange", () => { if (R && R.started && document.visibilityState === "visible") keepAwake(); });
 
 function openRoll() {
-  const list = activeAt(getClass(S.classId), S.draft.dt);
+  const list = callAt(getClass(S.classId), S.draft.dt);
   if (!list.length) return;
   const el = document.createElement("div");
   el.className = "roll"; el.setAttribute("role", "dialog"); el.setAttribute("aria-label", "음성 출석");
@@ -686,6 +716,178 @@ function closeRoll() {
   R.el.remove(); R = null; renderClass();
 }
 
+/* ---------- 명단 관리 ---------- */
+const REASONS = ["위탁", "수능 준비반"];
+// 지금 체크 중인(저장 전) 수업이 있으면 그 시각부터 바로 반영
+function effT(cls) {
+  const now = nowDT(), d = S.draft;
+  return d && !d.id && S.classId === cls.id && d.dt < now ? d.dt : now;
+}
+function setOff(s, reason, cls) {
+  const t = effT(cls);
+  s.off = s.off || [];
+  const cur = s.off.find(p => !p.to);
+  if ((cur ? cur.reason : null) === (reason || null)) return;
+  if (cur) { if (cur.from >= t) s.off.splice(s.off.indexOf(cur), 1); else cur.to = t; }
+  if (reason) s.off.push({ from: t, to: null, reason });
+}
+const nextNo = cls => cls.students.filter(s => !s.leftAt).reduce((m, s) => Math.max(m, s.no || 0), 0) + 1;
+
+function openRoster() {
+  S.rosterFrom = S.view; S.view = "roster";
+  history.pushState({ v: "roster" }, "");
+  render();
+}
+function rowHTML(s) {
+  const r = offNow(s);
+  const pill = s.leftAt ? `<span class="pill gone">${esc(s.leftNote || "전출")}</span>` : r ? `<span class="pill">${esc(r)}</span>` : "";
+  return `<button class="srow ${s.leftAt ? "gone" : ""}" data-stu="${s.id}">
+    <span class="no">${s.no ?? ""}</span><span class="nm">${esc(s.name)}</span>${pill}<span class="chev">${ICON.chev}</span></button>`;
+}
+function renderRoster() {
+  const cls = getClass(S.classId);
+  const cur = cls.students.filter(s => !s.leftAt).sort(byNo);
+  const gone = cls.students.filter(s => s.leftAt).sort(byNo);
+  const offN = cur.filter(s => offNow(s)).length;
+  app.innerHTML = `
+    <header class="bar"><div class="wrap">
+      <button class="icon-btn" data-act="roster-back" aria-label="뒤로">${ICON.back}</button>
+      <h1>${esc(cls.name)} 명단</h1>
+    </div></header>
+    <main class="wrap">
+      <div class="tally"><span>재적 ${cur.length}</span><span>출석 부름 ${cur.length - offN}</span>${offN ? `<span class="off">출석 제외 ${offN}</span>` : ""}</div>
+      <div class="roster">${cur.length ? cur.map(rowHTML).join("") : `<p class="help" style="padding:12px">학생이 없어요. 아래에서 추가해 주세요.</p>`}</div>
+      <p class="help">학생을 누르면 번호·이름을 고치거나 <b>출석 제외</b>(위탁, 수능 준비반 등), 반 옮기기, 전출을 할 수 있어요.</p>
+      ${gone.length ? `<div class="label">명단에서 빠진 학생</div><div class="roster">${gone.map(rowHTML).join("")}</div>` : ""}
+    </main>
+    <div class="dock"><div class="wrap">
+      <button class="btn primary" data-act="add-student">+ 학생 추가</button>
+    </div></div>`;
+}
+
+function openStudent(sid) {
+  const cls = getClass(S.classId);
+  const s = cls.students.find(x => x.id === sid);
+  if (!s) return;
+  if (s.leftAt) {
+    return ask({
+      title: `${s.no ?? ""}번 ${s.name}`,
+      body: `${prettyDT(s.leftAt)}에 명단에서 빠졌어요 (${esc(s.leftNote || "전출")}). 지난 출결 기록은 그대로 남아 있어요.`,
+      actions: [
+        { label: "명단으로 되돌리기", cls: "primary", fn: () => { s.leftAt = null; s.leftNote = null; persist(); renderRoster(); toast(`${s.name} 학생을 명단으로 되돌렸어요`); } },
+        { label: "완전히 지우기", cls: "danger", fn: () => confirmDelete(cls, s) },
+        { label: "닫기" }
+      ]
+    });
+  }
+  const cur = offNow(s);
+  const custom = cur && !REASONS.includes(cur);
+  const others = db.classes.filter(c => c.id !== cls.id);
+  sheet(`<h2>${s.no ?? ""}번 ${esc(s.name)}</h2>
+    <div class="set-row">
+      <label class="field no-f"><span class="label">번호</span><input id="st-no" type="number" inputmode="numeric" value="${s.no ?? ""}"></label>
+      <label class="field grow"><span class="label">이름</span><input id="st-name" type="text" value="${esc(s.name)}"></label>
+    </div>
+    <div class="set">
+      <span class="label">출석</span>
+      <div class="seg seg4" role="radiogroup">
+        <button data-off="" class="${!cur ? "on" : ""}">출석 부름</button>
+        <button data-off="위탁" class="${cur === "위탁" ? "on" : ""}">위탁</button>
+        <button data-off="수능 준비반" class="${cur === "수능 준비반" ? "on" : ""}">수능 준비반</button>
+        <button data-off="기타" class="${custom ? "on" : ""}">기타 사유</button>
+      </div>
+      <label class="field" id="st-why-f" ${custom ? "" : "hidden"}><span class="label">사유</span><input id="st-why" type="text" maxlength="10" placeholder="예: 장기 입원" value="${custom ? esc(cur) : ""}"></label>
+      <p class="help">출석 부름이 아닌 학생은 명단에 그대로 남지만 터치 출석과 음성 출석에서 빠져요. 엑셀에는 그날 칸에 사유가 적혀요.</p>
+    </div>
+    <div class="acts">
+      <button class="btn primary block" id="st-save">저장</button>
+      ${others.length ? `<button class="btn block" id="st-move">다른 반으로 옮기기</button>` : ""}
+      <button class="btn block" id="st-leave">전출 처리 (명단에서 빼기)</button>
+      <button class="btn danger block" id="st-del">완전히 지우기</button>
+    </div>`, (el, close) => {
+    let pick = custom ? "기타" : (cur || "");
+    el.querySelectorAll("[data-off]").forEach(b => b.onclick = () => {
+      pick = b.dataset.off;
+      el.querySelectorAll("[data-off]").forEach(x => x.classList.toggle("on", x === b));
+      el.querySelector("#st-why-f").hidden = pick !== "기타";
+      if (pick === "기타") el.querySelector("#st-why").focus();
+    });
+    el.querySelector("#st-save").onclick = () => {
+      const name = el.querySelector("#st-name").value.trim();
+      if (!name) return toast("이름을 넣어 주세요");
+      const no = parseInt(el.querySelector("#st-no").value, 10);
+      const reason = pick === "기타" ? (el.querySelector("#st-why").value.trim() || "기타") : (pick || null);
+      s.name = name; s.no = isNaN(no) ? null : no;
+      setOff(s, reason, cls);
+      if (reason && S.draft) S.draft.absent.delete(s.id);
+      persist(); close(); renderRoster();
+      toast(reason ? `${name} 학생은 이제 출석을 부르지 않아요 (${reason})` : `${name} 학생을 저장했어요`);
+    };
+    const mv = el.querySelector("#st-move");
+    if (mv) mv.onclick = () => { close(); moveStudent(cls, s, others); };
+    el.querySelector("#st-leave").onclick = () => {
+      close();
+      ask({ title: `${s.name} 학생을 명단에서 뺄까요?`, body: "이제부터 출석부에 나오지 않아요. 지난 출결 기록은 엑셀에 그대로 남고, 나중에 되돌릴 수도 있어요.",
+        actions: [{ label: "전출 처리", cls: "primary", fn: () => {
+          s.leftAt = effT(cls); s.leftNote = "전출"; if (S.draft) S.draft.absent.delete(s.id);
+          persist(); renderRoster(); toast(`${s.name} 학생을 전출 처리했어요`); } }, { label: "취소" }] });
+    };
+    el.querySelector("#st-del").onclick = () => { close(); confirmDelete(cls, s); };
+  });
+}
+function moveStudent(cls, s, others) {
+  sheet(`<h2>${esc(s.name)} 학생을 어느 반으로 옮길까요?</h2>
+    <p>${esc(cls.name)}의 지난 출결 기록은 그대로 남고, 옮긴 반에서는 오늘부터 출석을 불러요.</p>
+    <div class="acts">${others.map(c => `<button class="btn block" data-to="${c.id}">${esc(c.name)}</button>`).join("")}
+      <button class="btn block" id="mv-cancel">취소</button></div>`, (el, close) => {
+    el.querySelector("#mv-cancel").onclick = close;
+    el.querySelectorAll("[data-to]").forEach(b => b.onclick = () => {
+      const to = getClass(b.dataset.to), t = effT(cls), r = offNow(s);
+      s.leftAt = t; s.leftNote = `${to.name}(으)로 이동`;
+      if (S.draft) S.draft.absent.delete(s.id);
+      to.students.push({ id: uid(), no: nextNo(to), name: s.name, addedAt: nowDT(), leftAt: null,
+        off: r ? [{ from: nowDT(), to: null, reason: r }] : [] });
+      persist(); close(); renderRoster();
+      toast(`${s.name} 학생을 ${to.name}(으)로 옮겼어요. 번호는 그 반 명단에서 고칠 수 있어요`);
+    });
+  });
+}
+function confirmDelete(cls, s) {
+  ask({ title: `${s.name} 학생을 완전히 지울까요?`, body: "이 학생의 지난 출결 기록까지 모두 지워지고 되돌릴 수 없어요. 전학 간 학생이라면 <b>전출 처리</b>를 써 주세요.",
+    actions: [{ label: "완전히 지우기", cls: "solid-danger", fn: () => {
+      cls.students = cls.students.filter(x => x.id !== s.id);
+      db.sessions.forEach(ses => { if (ses.classId === cls.id) ses.absent = ses.absent.filter(id => id !== s.id); });
+      if (S.draft) S.draft.absent.delete(s.id);
+      persist(); renderRoster(); toast("학생을 지웠어요"); } }, { label: "취소" }] });
+}
+function addStudent() {
+  const cls = getClass(S.classId);
+  sheet(`<h2>학생 추가</h2>
+    <div class="set-row">
+      <label class="field no-f"><span class="label">번호</span><input id="ad-no" type="number" inputmode="numeric" value="${nextNo(cls)}"></label>
+      <label class="field grow"><span class="label">이름</span><input id="ad-name" type="text" placeholder="이름"></label>
+    </div>
+    <p class="help">추가한 때부터 출석부에 나와요. 그 전 수업 칸은 엑셀에 '-'로 표시돼요.</p>
+    <div class="acts">
+      <button class="btn primary block" id="ad-save">추가</button>
+      <button class="btn block" id="ad-more">추가하고 한 명 더</button>
+      <button class="btn block" id="ad-cancel">닫기</button>
+    </div>`, (el, close) => {
+    const nameI = el.querySelector("#ad-name"), noI = el.querySelector("#ad-no");
+    setTimeout(() => nameI.focus(), 50);
+    const add = () => {
+      const name = nameI.value.trim();
+      if (!name) { toast("이름을 넣어 주세요"); return false; }
+      const no = parseInt(noI.value, 10);
+      cls.students.push({ id: uid(), no: isNaN(no) ? nextNo(cls) : no, name, addedAt: effT(cls), leftAt: null, off: [] });
+      persist(); renderRoster(); toast(`${name} 학생을 추가했어요`); return true;
+    };
+    el.querySelector("#ad-save").onclick = () => { if (add()) close(); };
+    el.querySelector("#ad-more").onclick = () => { if (add()) { nameI.value = ""; noI.value = nextNo(cls); nameI.focus(); } };
+    el.querySelector("#ad-cancel").onclick = close;
+  });
+}
+
 /* ---------- 반: 지난 기록 ---------- */
 function renderRecords() {
   const cls = getClass(S.classId);
@@ -695,6 +897,7 @@ function renderRecords() {
     <header class="bar"><div class="wrap">
       <button class="icon-btn" data-act="to-class" aria-label="출석 체크로">${ICON.back}</button>
       <h1>${esc(cls.name)} 기록</h1>
+      <button class="icon-btn" data-act="roster">${ICON.people}명단</button>
     </div></header>
     <main class="wrap">
       <div class="records">${ses.length ? ses.map(s => `
@@ -886,13 +1089,13 @@ function buildWorkbook(classes) {
   const wb = XLSX.utils.book_new();
   const used = new Set(["진도 기록"]);
   const stamp = nowDT();
-  const prog = [["반", "수업 일시", "재적", "출석", "결석", "결석 학생", "진도 메모"]];
+  const prog = [["반", "수업 일시", "재적", "출석", "결석", "제외", "결석 학생", "진도 메모"]];
   for (const cls of classes) {
     const ses = classSessions(cls.id);
     const studs = [...cls.students].sort(byNo);
     const aoa = [
       [`${cls.name} 출석부`],
-      [`내보낸 시각 ${stamp}  ·  O = 출석, X = 결석, - = 그때 명단에 없음`],
+      [`내보낸 시각 ${stamp}  ·  O = 출석, X = 결석, 위탁·수능 준비반 등 = 출석 제외, - = 그때 명단에 없음`],
       [],
       ["번호", "이름", ...ses.map(s => colDT(s.dt)), "출석 수", "결석 수"]
     ];
@@ -900,23 +1103,24 @@ function buildWorkbook(classes) {
       let p = 0, a = 0;
       const cells = ses.map(s => {
         if ((st.addedAt && st.addedAt > s.dt) || (st.leftAt && st.leftAt <= s.dt)) return "-";
+        const r = offAt(st, s.dt); if (r) return r;
         if (s.absent.includes(st.id)) { a++; return "X"; }
         p++; return "O";
       });
-      aoa.push([st.no, st.name + (st.leftAt ? " (명단 제외)" : ""), ...cells, p, a]);
+      aoa.push([st.no, st.name + (st.leftAt ? ` (${st.leftNote || "전출"})` : ""), ...cells, p, a]);
     }
     aoa.push(["", "결석 인원", ...ses.map(s => s.absent.length), "", ""]);
     const ws = XLSX.utils.aoa_to_sheet(aoa);
     ws["!cols"] = [{ wch: 6 }, { wch: 14 }, ...ses.map(() => ({ wch: 14 })), { wch: 8 }, { wch: 8 }];
     XLSX.utils.book_append_sheet(wb, ws, sheetName(cls.name, used));
     for (const s of ses) {
-      const n = activeAt(cls, s.dt).length;
+      const all = activeAt(cls, s.dt).length, n = callAt(cls, s.dt).length;
       const names = s.absent.map(id => (cls.students.find(x => x.id === id) || {}).name).filter(Boolean).join(", ");
-      prog.push([cls.name, colDT(s.dt), n, n - s.absent.length, s.absent.length, names, s.memo || ""]);
+      prog.push([cls.name, colDT(s.dt), all, n - s.absent.length, s.absent.length, all - n, names, s.memo || ""]);
     }
   }
   const pws = XLSX.utils.aoa_to_sheet(prog);
-  pws["!cols"] = [{ wch: 14 }, { wch: 17 }, { wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 24 }, { wch: 50 }];
+  pws["!cols"] = [{ wch: 14 }, { wch: 15 }, { wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 24 }, { wch: 50 }];
   XLSX.utils.book_append_sheet(wb, pws, "진도 기록");
   return wb;
 }
@@ -1275,6 +1479,7 @@ app.addEventListener("click", e => {
   if (!t) return;
   if (t.dataset.sid) return toggle(t.dataset.sid);
   if (t.dataset.open) return openClass(t.dataset.open);
+  if (t.dataset.stu) return openStudent(t.dataset.stu);
   if (t.dataset.edit) { S.view = "class"; const s = db.sessions.find(x => x.id === t.dataset.edit);
     S.draft = { id: s.id, dt: s.dt, absent: new Set(s.absent), memo: s.memo || "" }; S.dirty = false; return render(); }
   if (t.dataset.del) {
@@ -1290,6 +1495,9 @@ app.addEventListener("click", e => {
     case "export-one": exportSheet([cls], `${cls.name} 내보내기`); break;
     case "save": saveSession(); break;
     case "roll": openRoll(); break;
+    case "roster": openRoster(); break;
+    case "roster-back": history.back(); break;
+    case "add-student": addStudent(); break;
     case "voice-set": openVoiceSettings(); break;
     case "settings": openSettings(); break;
     case "sync-now": syncDrive(true).then(ok => toast(ok ? "드라이브에 백업했어요" : "백업하지 못했어요. 인터넷 연결을 확인해 주세요")); break;
@@ -1322,6 +1530,7 @@ document.getElementById("file").addEventListener("change", e => {
 // 휴대폰 뒤로 가기
 window.addEventListener("popstate", () => {
   if (R) return closeRoll();
+  if (S.view === "roster") { S.view = S.rosterFrom || "class"; return render(); }
   if (S.view === "home") return;
   if (S.view === "records") { S.view = "home"; S.draft = null; return render(); }
   leaveClass();
