@@ -886,7 +886,7 @@ function buildWorkbook(classes) {
     const studs = [...cls.students].sort(byNo);
     const aoa = [
       [`${cls.name} 출석부`],
-      [`내보낸 시각 ${stamp}  ·  출 = 출석, 결 = 결석, - = 그때 명단에 없음`],
+      [`내보낸 시각 ${stamp}  ·  O = 출석, X = 결석, - = 그때 명단에 없음`],
       [],
       ["번호", "이름", ...ses.map(s => s.dt), "출석 수", "결석 수"]
     ];
@@ -894,8 +894,8 @@ function buildWorkbook(classes) {
       let p = 0, a = 0;
       const cells = ses.map(s => {
         if ((st.addedAt && st.addedAt > s.dt) || (st.leftAt && st.leftAt <= s.dt)) return "-";
-        if (s.absent.includes(st.id)) { a++; return "결"; }
-        p++; return "출";
+        if (s.absent.includes(st.id)) { a++; return "X"; }
+        p++; return "O";
       });
       aoa.push([st.no, st.name + (st.leftAt ? " (명단 제외)" : ""), ...cells, p, a]);
     }
@@ -985,7 +985,8 @@ const DRIVE = {
 const SCOPE = "https://www.googleapis.com/auth/drive.file";
 const FOLDER_NAME = "수업 출석부";
 const BACKUP_NAME = "출석부_백업.json";
-const XLSX_NAME = "출석부_전체.xlsx";
+const SHEET_NAME = "출석부_전체"; // 구글 스프레드시트로 저장
+const GSHEET_MIME = "application/vnd.google-apps.spreadsheet";
 const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 const API = "https://www.googleapis.com/drive/v3/files";
 const UP = "https://www.googleapis.com/upload/drive/v3/files";
@@ -1068,7 +1069,7 @@ function syncDrive(interactive) {
     try {
       const backup = { app: "attendance-book", version: 1, savedAt: nowDT(), data: db };
       await upsert(BACKUP_NAME, "application/json", new Blob([JSON.stringify(backup)], { type: "application/json" }), "backupId", interactive);
-      if (window.XLSX && db.classes.length) await upsert(XLSX_NAME, XLSX_MIME, exportFile(db.classes).blob, "xlsxId", interactive);
+      if (window.XLSX && db.classes.length) await upsert(SHEET_NAME, GSHEET_MIME, exportFile(db.classes).blob, "sheetId", interactive);
       dprefs.lastSync = nowDT(); dprefs.pending = false; dprefs.lastError = ""; savePrefs();
       return true;
     } catch (e) {
@@ -1152,7 +1153,7 @@ async function restoreDrive() {
 async function driveExportNow() {
   if (!dprefs.connected) return openDriveSettings();
   const ok = await syncDrive(true);
-  if (ok) toast(`드라이브 '${FOLDER_NAME}' 폴더에 ${XLSX_NAME}로 저장했어요`);
+  if (ok) toast(`드라이브 '${FOLDER_NAME}' 폴더의 '${SHEET_NAME}' 구글 시트에 저장했어요`);
   else toast("드라이브에 저장하지 못했어요. 인터넷 연결을 확인해 주세요.");
 }
 
@@ -1228,7 +1229,7 @@ function openDriveSettings() {
     : dprefs.lastSync ? `마지막 백업 ${prettyDT(dprefs.lastSync)}` : "연결됨";
   sheet(`<h2>구글 드라이브 백업</h2>
     <div class="drive-status ${state}"><span class="dot"></span><span>${msg}</span></div>
-    <p>출석을 저장할 때마다 내 드라이브의 <b>'${FOLDER_NAME}'</b> 폴더에 백업 파일과 출석부 엑셀(${XLSX_NAME})을 자동으로 저장해요. 이 앱이 만든 파일만 다루고, 드라이브의 다른 파일은 보지 않아요.</p>
+    <p>출석을 저장할 때마다 내 드라이브의 <b>'${FOLDER_NAME}'</b> 폴더에 백업 파일과 출석부 구글 시트('${SHEET_NAME}')를 자동으로 저장해요. 이 앱이 만든 파일만 다루고, 드라이브의 다른 파일은 보지 않아요.</p>
     <div class="acts">
       ${c ? `
         <button class="btn primary block" id="dv-sync">지금 백업하기</button>
