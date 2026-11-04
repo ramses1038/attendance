@@ -156,7 +156,14 @@ main.wrap { padding-block: 16px 140px; display: flex; flex-direction: column; ga
   min-height: 44px; padding: 0 10px; font-variant-numeric: tabular-nums;
 }
 .tally { display: flex; gap: 6px; font-variant-numeric: tabular-nums; }
-.tally span { border-radius: 999px; padding: 4px 10px; font-size: 13px; font-weight: 600; background: var(--surface); border: 1px solid var(--line); }
+.tally span, .tally button { border-radius: 999px; padding: 4px 10px; font-size: 13px; font-weight: 600; background: var(--surface); border: 1px solid var(--line); color: var(--ink); }
+.tally button { min-height: 34px; padding: 0 12px; }
+.tally button.abs { background: var(--absent-bg); color: var(--absent-ink); border-color: transparent; }
+.tally button.off { background: var(--off-bg); color: var(--off-ink); border-color: transparent; }
+.who-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.who-list span { border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; font-size: 15px; font-weight: 600; background: var(--bg); }
+.who-list span small { color: var(--muted); font-weight: 500; margin-right: 4px; font-variant-numeric: tabular-nums; }
+.who-list span em { font-style: normal; color: var(--off-ink); font-size: 13px; margin-left: 4px; }
 .tally .abs { background: var(--absent-bg); color: var(--absent-ink); border-color: transparent; }
 .editing { font-size: 13px; color: var(--accent); font-weight: 600; }
 
@@ -164,7 +171,7 @@ main.wrap { padding-block: 16px 140px; display: flex; flex-direction: column; ga
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
 .tile {
   position: relative; border: 1px solid var(--line); background: var(--surface);
-  border-radius: 12px; min-height: 78px; padding: 22px 6px 10px;
+  border-radius: 12px; min-height: 78px; padding: 18px 6px;
   display: flex; align-items: center; justify-content: center; text-align: center;
   font-size: 18px; font-weight: 600; line-height: 1.2; word-break: keep-all;
   transition: background .12s, border-color .12s;
@@ -584,7 +591,7 @@ function renderClass() {
     <header class="bar"><div class="wrap">
       <button class="icon-btn" data-act="back" aria-label="반 목록으로">${ICON.back}</button>
       <h1>${esc(cls.name)}</h1>
-      <button class="icon-btn" data-act="roster">${ICON.people}명단</button>
+      <button class="icon-btn" data-act="roster">${ICON.people}명단수정</button>
       <button class="icon-btn" data-act="records">${ICON.list}기록</button>
     </div></header>
     <main class="wrap">
@@ -622,7 +629,22 @@ function renderClass() {
     renderClass();
   };
 }
-const tallyHTML = (all, n, a) => `<span>재적 ${all}</span><span>출석 ${n - a}</span><span class="abs">결석 ${a}</span>${all > n ? `<span class="off">제외 ${all - n}</span>` : ""}`;
+const tallyHTML = (all, n, a) => `<button data-tally="all">재적 ${all}</button><button data-tally="present">출석 ${n - a}</button><button class="abs" data-tally="absent">결석 ${a}</button>${all > n ? `<button class="off" data-tally="off">제외 ${all - n}</button>` : ""}`;
+// 재적·출석·결석·제외를 누르면 해당 학생 보기
+function showTally(kind) {
+  const cls = getClass(S.classId), d = S.draft;
+  const all = activeAt(cls, d.dt), call = callAt(cls, d.dt);
+  const pick = {
+    all: ["재적", all],
+    present: ["출석", call.filter(s => !d.absent.has(s.id))],
+    absent: ["결석", call.filter(s => d.absent.has(s.id))],
+    off: ["출석 제외", all.filter(s => offAt(s, d.dt))]
+  }[kind];
+  const [title, list] = pick;
+  sheet(`<h2>${title} ${list.length}명</h2>
+    ${list.length ? `<div class="who-list">${list.map(s => `<span>${s.no != null ? `<small>${s.no}</small>` : ""}${esc(s.name)}${offAt(s, d.dt) ? `<em>${esc(offAt(s, d.dt))}</em>` : ""}</span>`).join("")}</div>` : `<p>해당하는 학생이 없어요.</p>`}
+    <button class="btn block" id="tl-x">닫기</button>`, (el, close) => { el.querySelector("#tl-x").onclick = close; });
+}
 const tileHTML = (s, absent) => `<button class="tile ${absent ? "absent" : ""}" data-sid="${s.id}" aria-pressed="${absent}">
   <span class="no">${s.no ?? ""}</span>${absent ? '<span class="mark">결석</span>' : ""}<span class="name">${esc(s.name)}</span></button>`;
 
@@ -999,7 +1021,7 @@ function renderRecords() {
     <header class="bar"><div class="wrap">
       <button class="icon-btn" data-act="to-class" aria-label="출석 체크로">${ICON.back}</button>
       <h1>${esc(cls.name)} 기록</h1>
-      <button class="icon-btn" data-act="roster">${ICON.people}명단</button>
+      <button class="icon-btn" data-act="roster">${ICON.people}명단수정</button>
     </div></header>
     <main class="wrap">
       <div class="records">${ses.length ? ses.map(s => `
@@ -1830,6 +1852,7 @@ app.addEventListener("click", e => {
   if (t.dataset.sid) return toggle(t.dataset.sid);
   if (t.dataset.open) return openClass(t.dataset.open);
   if (t.dataset.stu) return openStudent(t.dataset.stu);
+  if (t.dataset.tally) return showTally(t.dataset.tally);
   if (t.dataset.delclass) return deleteClass(getClass(t.dataset.delclass));
   if (t.dataset.rename) return renameClass(getClass(t.dataset.rename));
   if (t.dataset.edit) { S.view = "class"; const s = db.sessions.find(x => x.id === t.dataset.edit);
