@@ -261,34 +261,6 @@ main.wrap { padding-block: 16px 140px; display: flex; flex-direction: column; ga
   font-size: 14px; max-width: calc(100% - 32px); box-shadow: var(--shadow);
   pointer-events: none;
 }
-/* 음성 출석 */
-.roll {
-  position: fixed; inset: 0; z-index: 15; background: var(--bg);
-  display: flex; flex-direction: column; gap: 12px;
-  padding: calc(10px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) calc(14px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
-  max-width: 720px; margin: 0 auto;
-}
-.roll-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.roll-top .prog { font: 22px/1 var(--display); font-variant-numeric: tabular-nums; color: var(--muted); }
-.roll-who { text-align: center; display: flex; flex-direction: column; gap: 2px; padding-block: 4px; }
-.roll-who .no { font: 26px/1 var(--display); color: var(--muted); font-variant-numeric: tabular-nums; }
-.roll-who .nm { font: clamp(44px, 14vw, 72px)/1.1 var(--display); word-break: keep-all; }
-.roll-toggle {
-  flex: none; min-height: 84px; border-radius: 18px; border: 2px solid var(--line);
-  background: var(--surface); color: var(--ink);
-  display: flex; align-items: center; justify-content: center; gap: 12px;
-  font: 34px/1 var(--display); touch-action: manipulation;
-}
-.roll-toggle small { font: 500 14px/1.3 var(--body); color: var(--muted); }
-.roll-toggle.absent { background: var(--absent); border-color: var(--absent); color: #fff; }
-.roll-toggle.absent small { color: rgba(255,255,255,.85); }
-.roll .btn { flex-direction: column; gap: 4px; border-radius: 22px; touch-action: manipulation; }
-.roll .btn small { font: 500 15px/1.2 var(--body); opacity: .8; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.roll-next { flex: 1.5 1 0; min-height: 150px; font: 46px/1 var(--display); }
-.roll-again { flex: 1 1 0; min-height: 110px; font: 34px/1 var(--display); border-width: 2px; }
-.roll-prev { flex: none; min-height: 60px; font-size: 18px; }
-.roll-prev small { font-size: 13px; }
-.roll-set { min-height: 52px !important; font-size: 15px !important; border-radius: 14px !important; font-weight: 500; }
 .set { display: flex; flex-direction: column; gap: 8px; }
 .set-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .set select { flex: 1; min-width: 0; min-height: 44px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 10px; padding: 0 8px; }
@@ -344,14 +316,6 @@ main.wrap { padding-block: 16px 140px; display: flex; flex-direction: column; ga
 .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: var(--bg); border-radius: 12px; padding: 4px; }
 .seg button { border: 0; background: transparent; border-radius: 9px; min-height: 48px; font-weight: 600; font-size: 16px; color: var(--muted); }
 .seg button.on { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
-.roll-start { flex: 1; display: flex; flex-direction: column; gap: 16px; justify-content: center; text-align: center; }
-.roll-start h2 { font: 30px/1.25 var(--display); margin: 0; text-wrap: balance; }
-.roll-start p { margin: 0; color: var(--muted); }
-.roll-start .vol { background: var(--accent-soft); border-radius: var(--r); padding: 14px; color: var(--ink); font-weight: 500; }
-.roll-start .btn { min-height: 120px; font-size: 26px; border-radius: 24px; }
-.roll-opt { display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--muted); }
-.roll-opt input { width: 22px; height: 22px; accent-color: var(--accent); }
-.roll-done { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
@@ -637,7 +601,6 @@ function renderClass() {
       </label>
     </main>
     <div class="dock"><div class="wrap">
-      ${studs.length ? `<button class="btn" data-act="roll">${ICON.voice}음성 출석</button>` : ""}
       <button class="btn primary" data-act="save">${d.id ? "고친 내용 저장" : "출석 저장"}</button>
     </div></div>`;
 
@@ -714,156 +677,9 @@ function leaveClass(after) {
   } else go();
 }
 
-/* ---------- 음성 출석 ---------- */
-let R = null; // { list, i, el, lock }
+/* ---------- 설정 저장 ---------- */
 const prefs = (() => { try { return JSON.parse(localStorage.getItem(KEY + ".prefs")) || {}; } catch (e) { return {}; } })();
-if (prefs.sayNo === undefined) prefs.sayNo = true;
 function savePrefs() { try { localStorage.setItem(KEY + ".prefs", JSON.stringify(prefs)); } catch (e) {} }
-
-if (prefs.gender === undefined) prefs.gender = "female";
-if (prefs.rate === undefined) prefs.rate = 0.9;
-
-// 목소리 이름으로 성별 짐작 (기기마다 이름이 달라 모를 수도 있음)
-const FEMALE = /female|woman|여성|여자|yuna|heami|sunhi|jimin|seoyeon|x-ism|x-kob/i;
-const MALE = /\bmale\b|man\b|남성|남자|injoon|hyunsu|bongjin|gookmin|x-koc|x-kod/i;
-const genderOf = v => FEMALE.test(v.name + " " + v.voiceURI) ? "female" : MALE.test(v.name + " " + v.voiceURI) ? "male" : null;
-let koVoices = [];
-function loadVoices() { try { koVoices = speechSynthesis.getVoices().filter(x => /^ko/i.test(x.lang)); } catch (e) {} }
-if ("speechSynthesis" in window) { loadVoices(); speechSynthesis.onvoiceschanged = loadVoices; }
-function chooseVoice() {
-  if (!koVoices.length) loadVoices();
-  const picked = prefs.voiceURI && koVoices.find(v => v.voiceURI === prefs.voiceURI);
-  if (picked) return picked;
-  return koVoices.find(v => genderOf(v) === prefs.gender && v.localService)
-      || koVoices.find(v => genderOf(v) === prefs.gender)
-      || koVoices.find(v => v.localService) || koVoices[0] || null;
-}
-function speak(text) {
-  if (!("speechSynthesis" in window)) return;
-  try {
-    speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text), v = chooseVoice();
-    u.lang = "ko-KR"; if (v) u.voice = v;
-    // 고른 성별의 목소리가 기기에 없으면 높낮이로 맞춤
-    u.pitch = v && genderOf(v) === prefs.gender ? 1 : (prefs.gender === "male" ? 0.65 : 1.15);
-    u.volume = 1; u.rate = prefs.rate;
-    speechSynthesis.speak(u);
-  } catch (e) {}
-}
-const rateLabel = r => (r < 0.85 ? "느리게" : r > 1.05 ? "빠르게" : "보통") + ` · ${r.toFixed(1)}배`;
-function openVoiceSettings() {
-  loadVoices();
-  const opts = koVoices.map(v => {
-    const g = genderOf(v);
-    return `<option value="${esc(v.voiceURI)}" ${prefs.voiceURI === v.voiceURI ? "selected" : ""}>${esc(v.name)}${g ? (g === "male" ? " (남자)" : " (여자)") : ""}</option>`;
-  }).join("");
-  sheet(`<h2>음성 설정</h2>
-    <div class="set">
-      <span class="label">목소리</span>
-      <div class="seg" role="radiogroup">
-        <button class="${prefs.gender === "female" ? "on" : ""}" data-g="female" role="radio" aria-checked="${prefs.gender === "female"}">여자</button>
-        <button class="${prefs.gender === "male" ? "on" : ""}" data-g="male" role="radio" aria-checked="${prefs.gender === "male"}">남자</button>
-      </div>
-      ${koVoices.length > 1 ? `<label class="set-row"><span>기기 목소리</span><select id="v-uri"><option value="">자동으로 고르기</option>${opts}</select></label>` : ""}
-      <div class="note">
-        <b>남자 목소리가 안 들리나요?</b>
-        <p>이 앱은 폰에 설치된 목소리만 쓸 수 있어요. 갤럭시는 기본 한국어 목소리가 여자 하나뿐인 경우가 많아서, 이때는 높낮이를 낮춰 남자처럼 들리게 해요.</p>
-        <p>더 자연스러운 남자 목소리를 쓰려면</p>
-        <ol>
-          <li>Play 스토어에서 <b>Google 음성 인식 및 음성 합성</b> 앱을 설치하거나 업데이트해요.</li>
-          <li>폰 <b>설정 → 일반 → 텍스트 음성 변환(TTS)</b>에서 기본 엔진을 <b>Google 음성 인식 및 음성 합성</b>으로 바꿔요.</li>
-          <li>엔진 옆 톱니바퀴 → <b>음성 데이터 설치 → 한국어</b>를 내려받고, 남자 목소리를 골라요.</li>
-          <li>이 앱을 완전히 닫았다가 다시 열면 <b>기기 목소리</b> 목록에 새 목소리가 나와요.</li>
-        </ol>
-      </div>
-    </div>
-    <div class="set">
-      <label class="set-row" for="v-rate"><span class="label">읽는 속도</span><span id="v-rate-l">${rateLabel(prefs.rate)}</span></label>
-      <input type="range" id="v-rate" min="0.5" max="1.5" step="0.1" value="${prefs.rate}">
-      <div class="set-row help"><span>느리게</span><span>빠르게</span></div>
-    </div>
-    <label class="roll-opt"><input type="checkbox" id="v-no" ${prefs.sayNo ? "checked" : ""}> 번호도 함께 읽기</label>
-    <div class="acts">
-      <button class="btn block" id="v-test">${ICON.voice}미리 듣기</button>
-      <button class="btn primary block" id="v-done">확인</button>
-    </div>`, (el, close) => {
-    const test = () => speak(prefs.sayNo ? "1번, 홍길동" : "홍길동");
-    el.querySelectorAll("[data-g]").forEach(b => b.onclick = () => {
-      prefs.gender = b.dataset.g; prefs.voiceURI = "";
-      const sel = el.querySelector("#v-uri"); if (sel) sel.value = "";
-      el.querySelectorAll("[data-g]").forEach(x => { x.classList.toggle("on", x === b); x.setAttribute("aria-checked", x === b); });
-      savePrefs(); test();
-    });
-    const sel = el.querySelector("#v-uri");
-    if (sel) sel.onchange = () => { prefs.voiceURI = sel.value; savePrefs(); test(); };
-    const r = el.querySelector("#v-rate");
-    r.oninput = () => { prefs.rate = +r.value; el.querySelector("#v-rate-l").textContent = rateLabel(prefs.rate); };
-    r.onchange = () => { savePrefs(); test(); };
-    el.querySelector("#v-no").onchange = e => { prefs.sayNo = e.target.checked; savePrefs(); };
-    el.querySelector("#v-test").onclick = test;
-    el.querySelector("#v-done").onclick = () => { savePrefs(); close(); };
-  });
-}
-const sayStudent = s => speak(prefs.sayNo && s.no != null ? `${s.no}번, ${s.name}` : s.name);
-
-async function keepAwake() {
-  try { if (R && navigator.wakeLock) R.lock = await navigator.wakeLock.request("screen"); } catch (e) {}
-}
-document.addEventListener("visibilitychange", () => { if (R && R.started && document.visibilityState === "visible") keepAwake(); });
-
-function openRoll() {
-  const list = callAt(getClass(S.classId), S.draft.dt);
-  if (!list.length) return;
-  const el = document.createElement("div");
-  el.className = "roll"; el.setAttribute("role", "dialog"); el.setAttribute("aria-label", "음성 출석");
-  document.body.appendChild(el);
-  R = { list, i: 0, el, lock: null, started: false };
-  history.pushState({ v: "roll" }, "");
-  const noVoice = !("speechSynthesis" in window);
-  el.innerHTML = `<div class="roll-top"><button class="btn" data-r="close">닫기</button><span class="prog">${list.length}명</span></div>
-    <div class="roll-start">
-      <h2>번호순으로 이름을 불러 드릴게요</h2>
-      <div class="vol">시작하기 전에 휴대폰 <b>음량을 최대로</b> 올려 주세요. 블루투스 스피커에 연결하면 뒷자리까지 더 잘 들려요.</div>
-      ${noVoice ? `<p>이 브라우저는 음성 읽기를 지원하지 않아요. 화면의 이름을 보며 진행할 수 있어요.</p>` : ""}
-      <button class="btn primary" data-r="start">시작</button>
-      <button class="btn roll-set" data-r="settings">음성 설정 · ${prefs.gender === "male" ? "남자" : "여자"} 목소리, ${rateLabel(prefs.rate)}</button>
-    </div>`;
-}
-function renderRoll() {
-  const s = R.list[R.i], ab = S.draft.absent.has(s.id), last = R.i === R.list.length - 1;
-  R.el.innerHTML = `<div class="roll-top"><button class="btn" data-r="close">그만하기</button><span class="prog">${R.i + 1} / ${R.list.length}</span></div>
-    <div class="roll-who"><span class="no">${s.no != null ? s.no + "번" : "&nbsp;"}</span><span class="nm">${esc(s.name)}</span></div>
-    <button class="roll-toggle ${ab ? "absent" : ""}" data-r="toggle" aria-pressed="${ab}">${ab ? "결석" : "출석"}<small>${ab ? "누르면 출석으로" : "누르면 결석으로"}</small></button>
-    <button class="btn roll-next ${last ? "roll-done" : "primary"}" data-r="next">${last ? "완료" : "다음"}<small>${last ? "출석 저장" : esc((R.list[R.i + 1].no != null ? R.list[R.i + 1].no + "번 " : "") + R.list[R.i + 1].name)}</small></button>
-    <button class="btn roll-again" data-r="again">다시 부르기<small>${esc(s.name)}</small></button>
-    <button class="btn roll-prev" data-r="prev" ${R.i === 0 ? "disabled" : ""}>이전${R.i > 0 ? `<small>${esc(R.list[R.i - 1].name)}</small>` : ""}</button>`;
-}
-document.addEventListener("click", e => {
-  if (!R) return;
-  const b = e.target.closest("[data-r]");
-  if (!b || !R.el.contains(b) || b.disabled) return;
-  const s = R.list[R.i], d = S.draft;
-  switch (b.dataset.r) {
-    case "start":
-      R.started = true; keepAwake(); renderRoll(); sayStudent(R.list[0]); break;
-    case "toggle":
-      if (d.absent.has(s.id)) { d.absent.delete(s.id); buzz(20); } else { d.absent.add(s.id); buzz([70, 50, 70]); }
-      S.dirty = true; renderRoll(); break;
-    case "again": sayStudent(s); break;
-    case "settings": openVoiceSettings(); break;
-    case "prev": R.i--; renderRoll(); sayStudent(R.list[R.i]); break;
-    case "next":
-      buzz(35);
-      if (R.i < R.list.length - 1) { R.i++; renderRoll(); sayStudent(R.list[R.i]); }
-      else { const a = [...d.absent].length; speak(a ? `출석 확인을 마쳤습니다. 결석 ${a}명` : "출석 확인을 마쳤습니다. 모두 출석"); saveSession(); history.back(); }
-      break;
-    case "close": try { speechSynthesis.cancel(); } catch (e) {} history.back(); break;
-  }
-});
-function closeRoll() {
-  try { R.lock && R.lock.release(); } catch (e) {}
-  R.el.remove(); R = null; renderClass();
-}
 
 /* ---------- 명단 관리 ---------- */
 const REASONS = ["위탁", "수능 준비반"];
@@ -1865,18 +1681,7 @@ function openImportChoice() {
     on("#im-cancel", () => {});
   });
 }
-function openSettings() {
-  sheet(`<h2>설정</h2>
-    <div class="acts">
-      <button class="btn block" id="st-voice">${ICON.voice}음성 설정</button>
-      <button class="btn block" id="st-drive">${ICON.drive}구글 드라이브 백업</button>
-      <button class="btn block" id="st-close">닫기</button>
-    </div>`, (el, close) => {
-    el.querySelector("#st-voice").onclick = () => { close(); openVoiceSettings(); };
-    el.querySelector("#st-drive").onclick = () => { close(); openDriveSettings(); };
-    el.querySelector("#st-close").onclick = close;
-  });
-}
+function openSettings() { openDriveSettings(); }
 function openDriveSettings() {
   if (!driveConfigured()) {
     return ask({ title: "구글 드라이브 연결 준비 중", body: "앱에 구글 연결 정보가 아직 들어가지 않았어요. 준비가 끝나면 이 화면에서 연결할 수 있어요.", actions: [{ label: "확인", cls: "primary" }] });
@@ -1952,7 +1757,6 @@ app.addEventListener("click", e => {
     case "edit-home": S.editHome = !S.editHome; render(); break;
     case "export-one": exportSheet([cls], `${cls.name} 내보내기`); break;
     case "save": saveSession(); break;
-    case "roll": openRoll(); break;
     case "session-back": history.back(); break;
     case "ses-prev": case "ses-next": {
       const list = classSessions(S.classId), i = list.findIndex(x => x.id === S.sessionId);
@@ -1963,7 +1767,6 @@ app.addEventListener("click", e => {
     case "roster": openRoster(); break;
     case "roster-back": history.back(); break;
     case "add-student": addStudent(); break;
-    case "voice-set": openVoiceSettings(); break;
     case "settings": openSettings(); break;
     case "sync-now": syncDrive(true).then(ok => toast(ok ? "드라이브에 백업했어요" : "백업하지 못했어요. 인터넷 연결을 확인해 주세요")); break;
     case "back": history.back(); break;
@@ -1987,7 +1790,6 @@ app.addEventListener("click", e => {
 
 // 휴대폰 뒤로 가기
 window.addEventListener("popstate", () => {
-  if (R) return closeRoll();
   if (S.view === "roster") { S.view = S.rosterFrom || "class"; return render(); }
   if (S.view === "home") return;
   if (S.view === "session") { S.view = "records"; return render(); }
