@@ -15,6 +15,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="xlsx.full.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://apis.google.com/js/api.js" async defer></script>
 <script>
   if (!window.XLSX) document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"><\/script>');
 </script>
@@ -264,6 +266,16 @@ main.wrap { padding-block: 16px 140px; display: flex; flex-direction: column; ga
 .set-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .set select { flex: 1; min-width: 0; min-height: 44px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 10px; padding: 0 8px; }
 .set input[type=range] { width: 100%; accent-color: var(--accent); height: 32px; }
+.note { background: var(--accent-soft); border-radius: 12px; padding: 12px 14px; font-size: 14px; display: flex; flex-direction: column; gap: 6px; }
+.note p { margin: 0; color: var(--ink); }
+.note ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
+.drive-status { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.drive-status .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
+.drive-status.ok .dot { background: #3E8E5A; }
+.drive-status.wait .dot { background: #D89A2B; }
+.sync-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--muted); }
+.sync-line .btn { min-height: 36px; padding: 0 12px; font-size: 13px; }
+.sheet a.btn { text-decoration: none; }
 .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: var(--bg); border-radius: 12px; padding: 4px; }
 .seg button { border: 0; background: transparent; border-radius: 9px; min-height: 48px; font-weight: 600; font-size: 16px; color: var(--muted); }
 .seg button.on { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
@@ -298,7 +310,7 @@ function load() {
   return { classes: [], sessions: [] };
 }
 function persist() {
-  try { localStorage.setItem(KEY, JSON.stringify(db)); return true; }
+  try { localStorage.setItem(KEY, JSON.stringify(db)); onDataChanged(); return true; }
   catch (e) { toast("기기에 저장하지 못했어요. 휴대폰 저장 공간을 확인해 주세요."); return false; }
 }
 try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) {}
@@ -334,6 +346,7 @@ const ICON = {
   upload: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 18v-6"/><path d="M9 15l3-3 3 3"/></svg>',
   list: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>',
   gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
+  drive: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M8.5 3h7l6 10.5-3.5 6h-12L2.5 13.5z"/><path d="M8.5 3l6 10.5h7"/><path d="M6 19.5l6-10"/></svg>',
   voice: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>'
 };
 
@@ -400,15 +413,17 @@ function renderHome() {
         ${lastMemo ? `<span class="memo">${esc(lastMemo.memo.split("\n")[0])}</span>` : ""}
       </button>`;
     }).join("")}</div>
-    <p class="help">학생을 누르면 <b>결석</b>, 아무것도 누르지 않으면 <b>출석</b>으로 저장돼요.</p>`;
+    <p class="help">학생을 누르면 <b>결석</b>, 아무것도 누르지 않으면 <b>출석</b>으로 저장돼요.</p>
+    <div class="sync-line" id="sync-line"></div>`;
   }
   app.innerHTML = `
-    <header class="bar"><div class="wrap"><h1>수업 출석부</h1><span class="sub">${today}</span><button class="icon-btn" data-act="voice-set" aria-label="음성 설정">${ICON.gear}</button></div></header>
+    <header class="bar"><div class="wrap"><h1>수업 출석부</h1><span class="sub">${today}</span><button class="icon-btn" data-act="settings" aria-label="설정">${ICON.gear}</button></div></header>
     <main class="wrap">${body}</main>
     ${classes.length ? `<div class="dock"><div class="wrap">
       <button class="btn" data-act="import">${ICON.upload}명단 올리기</button>
       <button class="btn primary" data-act="export">${ICON.share}출석부 내보내기</button>
     </div></div>` : ""}`;
+  updateSyncLine();
 }
 
 /* ---------- 반: 출석 체크 ---------- */
@@ -571,7 +586,17 @@ function openVoiceSettings() {
         <button class="${prefs.gender === "male" ? "on" : ""}" data-g="male" role="radio" aria-checked="${prefs.gender === "male"}">남자</button>
       </div>
       ${koVoices.length > 1 ? `<label class="set-row"><span>기기 목소리</span><select id="v-uri"><option value="">자동으로 고르기</option>${opts}</select></label>` : ""}
-      <p class="help">기기에 고른 성별의 목소리가 없으면 높낮이를 바꿔 비슷하게 들려 드려요.</p>
+      <div class="note">
+        <b>남자 목소리가 안 들리나요?</b>
+        <p>이 앱은 폰에 설치된 목소리만 쓸 수 있어요. 갤럭시는 기본 한국어 목소리가 여자 하나뿐인 경우가 많아서, 이때는 높낮이를 낮춰 남자처럼 들리게 해요.</p>
+        <p>더 자연스러운 남자 목소리를 쓰려면</p>
+        <ol>
+          <li>Play 스토어에서 <b>Google 음성 인식 및 음성 합성</b> 앱을 설치하거나 업데이트해요.</li>
+          <li>폰 <b>설정 → 일반 → 텍스트 음성 변환(TTS)</b>에서 기본 엔진을 <b>Google 음성 인식 및 음성 합성</b>으로 바꿔요.</li>
+          <li>엔진 옆 톱니바퀴 → <b>음성 데이터 설치 → 한국어</b>를 내려받고, 남자 목소리를 골라요.</li>
+          <li>이 앱을 완전히 닫았다가 다시 열면 <b>기기 목소리</b> 목록에 새 목소리가 나와요.</li>
+        </ol>
+      </div>
     </div>
     <div class="set">
       <label class="set-row" for="v-rate"><span class="label">읽는 속도</span><span id="v-rate-l">${rateLabel(prefs.rate)}</span></label>
@@ -649,6 +674,7 @@ document.addEventListener("click", e => {
     case "settings": openVoiceSettings(); break;
     case "prev": R.i--; renderRoll(); sayStudent(R.list[R.i]); break;
     case "next":
+      buzz(35);
       if (R.i < R.list.length - 1) { R.i++; renderRoll(); sayStudent(R.list[R.i]); }
       else { const a = [...d.absent].length; speak(a ? `출석 확인을 마쳤습니다. 결석 ${a}명` : "출석 확인을 마쳤습니다. 모두 출석"); saveSession(); history.back(); }
       break;
@@ -758,12 +784,13 @@ function parseWorkbook(wb, fileName) {
   return [...out].map(([name, students]) => ({ name, students: students.sort(byNo) }));
 }
 
-async function handleFile(file) {
+async function handleFile(file) { return handleBuffer(await file.arrayBuffer(), file.name); }
+function handleBuffer(buf, fileName) {
   if (!window.XLSX) { toast("엑셀 도구를 불러오지 못했어요. 인터넷 연결을 확인해 주세요."); return; }
   let groups;
   try {
-    const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
-    groups = parseWorkbook(wb, file.name);
+    const wb = XLSX.read(buf, { type: "array" });
+    groups = parseWorkbook(wb, fileName);
   } catch (e) {
     ask({ title: "파일을 열지 못했어요", body: "엑셀(.xlsx, .xls) 또는 CSV 파일인지 확인해 주세요.", actions: [{ label: "확인", cls: "primary" }] });
     return;
@@ -918,13 +945,288 @@ function exportSheet(classes, title) {
     <p>${classes.length}개 반, 수업 기록 ${n}회를 내보내요.</p>
     <p class="help"><b>공유하기</b>는 휴대폰 제한 때문에 반마다 CSV 파일로 보내요. 컴퓨터의 엑셀에서 그대로 열려요. 시트가 나뉜 엑셀 파일(.xlsx)이 필요하면 <b>파일로 저장</b>을 눌러 주세요.</p>
     <div class="acts">
-      <button class="btn primary block" id="ex-share">${ICON.share}공유하기 (카카오톡·드라이브·메일)</button>
+      ${driveConfigured() ? `<button class="btn primary block" id="ex-drive">${ICON.drive}구글 드라이브에 저장</button>` : ""}
+      <button class="btn ${driveConfigured() ? "" : "primary"} block" id="ex-share">${ICON.share}공유하기 (카카오톡·메일)</button>
       <button class="btn block" id="ex-save">엑셀 파일(.xlsx)로 저장</button>
       <button class="btn block" id="ex-cancel">취소</button>
     </div>`, (el, close) => {
     el.querySelector("#ex-share").onclick = () => { close(); shareOut(classes); };
     el.querySelector("#ex-save").onclick = () => { close(); saveOut(classes); };
+    const dr = el.querySelector("#ex-drive");
+    if (dr) dr.onclick = () => { close(); driveExportNow(); };
     el.querySelector("#ex-cancel").onclick = close;
+  });
+}
+
+/* ---------- 구글 드라이브 ---------- */
+// 구글 클라우드 콘솔에서 받은 값 (비어 있으면 드라이브 기능이 숨겨짐)
+const DRIVE = {
+  clientId: "",   // OAuth 클라이언트 ID (…apps.googleusercontent.com)
+  apiKey: "",     // API 키 (Picker용)
+  appId: ""       // 프로젝트 번호 (숫자)
+};
+const SCOPE = "https://www.googleapis.com/auth/drive.file";
+const FOLDER_NAME = "수업 출석부";
+const BACKUP_NAME = "출석부_백업.json";
+const XLSX_NAME = "출석부_전체.xlsx";
+const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const API = "https://www.googleapis.com/drive/v3/files";
+const UP = "https://www.googleapis.com/upload/drive/v3/files";
+if (!prefs.drive) prefs.drive = {};
+const dprefs = prefs.drive; // { connected, folderId, backupId, xlsxId, lastSync, pending }
+
+const driveConfigured = () => !!DRIVE.clientId;
+let tok = null;
+try { const t = JSON.parse(sessionStorage.getItem(KEY + ".tok")); if (t && t.exp > Date.now()) tok = t; } catch (e) {}
+let tokenClient = null, waiters = [];
+function finishToken(err, r) {
+  const w = waiters; waiters = [];
+  if (err) return w.forEach(x => x.rej(err));
+  tok = { access_token: r.access_token, exp: Date.now() + (r.expires_in - 60) * 1000 };
+  try { sessionStorage.setItem(KEY + ".tok", JSON.stringify(tok)); } catch (e) {}
+  w.forEach(x => x.res(tok.access_token));
+}
+function getToken(interactive) {
+  if (tok && tok.exp > Date.now()) return Promise.resolve(tok.access_token);
+  if (!interactive) return Promise.reject(new Error("needs_click"));
+  if (!(window.google && google.accounts && google.accounts.oauth2)) return Promise.reject(new Error("gis_not_loaded"));
+  if (!tokenClient) tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: DRIVE.clientId, scope: SCOPE,
+    callback: r => r.error ? finishToken(new Error(r.error)) : finishToken(null, r),
+    error_callback: e => finishToken(new Error(e && e.type || "popup_failed"))
+  });
+  return new Promise((res, rej) => {
+    waiters.push({ res, rej });
+    if (waiters.length === 1) tokenClient.requestAccessToken({ prompt: dprefs.connected ? "" : "consent" });
+  });
+}
+async function gfetch(url, opts, interactive) {
+  const t = await getToken(interactive);
+  const r = await fetch(url, Object.assign({}, opts, { headers: Object.assign({}, (opts || {}).headers, { Authorization: "Bearer " + t }) }));
+  if (r.status === 401) { tok = null; try { sessionStorage.removeItem(KEY + ".tok"); } catch (e) {} throw new Error("expired"); }
+  if (!r.ok) throw new Error("http_" + r.status);
+  return r;
+}
+const gjson = async (url, opts, i) => (await gfetch(url, opts, i)).json();
+const isAuthErr = e => /needs_click|expired|gis_not_loaded|popup|access_denied/.test(e.message);
+const q = s => encodeURIComponent(s);
+
+async function aliveId(id, i) {
+  if (!id) return null;
+  try { const j = await gjson(`${API}/${id}?fields=id,trashed`, {}, i); return j.trashed ? null : j.id; }
+  catch (e) { if (isAuthErr(e)) throw e; return null; }
+}
+async function ensureFolder(i) {
+  let id = await aliveId(dprefs.folderId, i);
+  if (!id) {
+    const l = await gjson(`${API}?q=${q(`name='${FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`)}&fields=files(id)`, {}, i);
+    id = l.files[0] ? l.files[0].id : (await gjson(`${API}?fields=id`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: FOLDER_NAME, mimeType: "application/vnd.google-apps.folder" })
+    }, i)).id;
+  }
+  dprefs.folderId = id; savePrefs(); return id;
+}
+async function findInFolder(name, i) {
+  const folder = await ensureFolder(i);
+  const l = await gjson(`${API}?q=${q(`name='${name}' and '${folder}' in parents and trashed=false`)}&orderBy=modifiedTime desc&fields=files(id,modifiedTime)`, {}, i);
+  return l.files[0] || null;
+}
+async function upsert(name, mime, blob, idKey, i) {
+  const folder = await ensureFolder(i);
+  let id = await aliveId(dprefs[idKey], i);
+  if (!id) { const f = await findInFolder(name, i); id = f && f.id; }
+  const fd = new FormData();
+  fd.append("metadata", new Blob([JSON.stringify(id ? { name } : { name, parents: [folder], mimeType: mime })], { type: "application/json" }));
+  fd.append("file", blob);
+  const j = await gjson(id ? `${UP}/${id}?uploadType=multipart&fields=id` : `${UP}?uploadType=multipart&fields=id`, { method: id ? "PATCH" : "POST", body: fd }, i);
+  dprefs[idKey] = j.id; savePrefs(); return j.id;
+}
+
+let syncing = null;
+function syncDrive(interactive) {
+  if (!driveConfigured() || !dprefs.connected) return Promise.resolve(false);
+  if (syncing) return syncing;
+  syncing = (async () => {
+    try {
+      const backup = { app: "attendance-book", version: 1, savedAt: nowDT(), data: db };
+      await upsert(BACKUP_NAME, "application/json", new Blob([JSON.stringify(backup)], { type: "application/json" }), "backupId", interactive);
+      if (window.XLSX && db.classes.length) await upsert(XLSX_NAME, XLSX_MIME, exportFile(db.classes).blob, "xlsxId", interactive);
+      dprefs.lastSync = nowDT(); dprefs.pending = false; dprefs.lastError = ""; savePrefs();
+      return true;
+    } catch (e) {
+      dprefs.pending = true; dprefs.lastError = isAuthErr(e) ? "auth" : "net"; savePrefs();
+      return false;
+    } finally { syncing = null; updateSyncLine(); }
+  })();
+  updateSyncLine();
+  return syncing;
+}
+// 기록이 바뀌면 바로 백업 (저장 버튼을 누른 직후라 구글 확인 창도 띄울 수 있음)
+let restoring = false;
+function onDataChanged() {
+  if (restoring || !driveConfigured() || !dprefs.connected) return;
+  dprefs.pending = true; savePrefs(); syncDrive(true);
+}
+function updateSyncLine() {
+  const el = document.getElementById("sync-line");
+  if (!el) return;
+  if (!driveConfigured() || !dprefs.connected) { el.innerHTML = ""; return; }
+  if (syncing) { el.innerHTML = `<span>드라이브에 백업하는 중…</span>`; return; }
+  if (dprefs.pending) {
+    el.innerHTML = `<span>${dprefs.lastError === "net" ? "인터넷이 연결되면 백업할게요" : "드라이브 백업을 기다리는 중이에요"}</span><button class="btn" data-act="sync-now">지금 백업</button>`;
+    return;
+  }
+  el.innerHTML = dprefs.lastSync ? `<span>드라이브 백업 · ${prettyDT(dprefs.lastSync)}</span>` : "";
+}
+function driveError(e) {
+  if (e.message === "gis_not_loaded") toast("구글 로그인 도구를 불러오지 못했어요. 인터넷 연결을 확인해 주세요.");
+  else if (/popup|access_denied/.test(e.message)) toast("구글 계정 확인이 취소됐어요. 다시 눌러 주세요.");
+  else toast("드라이브에 연결하지 못했어요. 잠시 뒤 다시 해 주세요.");
+}
+
+async function connectDrive() {
+  try {
+    await getToken(true);
+    dprefs.connected = true; savePrefs();
+    await ensureFolder(true);
+    const b = await findInFolder(BACKUP_NAME, true);
+    if (b && !db.classes.length) {
+      toast("드라이브에서 지난 백업을 찾았어요");
+      return restoreDrive();
+    }
+    const ok = await syncDrive(true);
+    toast(ok ? "구글 드라이브에 연결하고 백업했어요" : "연결했지만 백업하지 못했어요. 다시 해 주세요.");
+    render();
+  } catch (e) { driveError(e); }
+}
+function disconnectDrive() {
+  try { if (tok && window.google) google.accounts.oauth2.revoke(tok.access_token, () => {}); } catch (e) {}
+  tok = null; try { sessionStorage.removeItem(KEY + ".tok"); } catch (e) {}
+  Object.keys(dprefs).forEach(k => delete dprefs[k]); savePrefs();
+  render(); toast("구글 드라이브 연결을 끊었어요. 드라이브에 있는 파일은 그대로 있어요.");
+}
+async function restoreDrive() {
+  let backup;
+  try {
+    const f = await findInFolder(BACKUP_NAME, true);
+    if (!f) { toast("드라이브에 백업 파일이 아직 없어요"); return; }
+    backup = await gjson(`${API}/${f.id}?alt=media`, {}, true);
+    dprefs.backupId = f.id; savePrefs();
+  } catch (e) { return driveError(e); }
+  if (!backup || backup.app !== "attendance-book" || !backup.data || !Array.isArray(backup.data.classes)) {
+    toast("백업 파일 형식이 맞지 않아요"); return;
+  }
+  const d = backup.data;
+  ask({
+    title: "백업을 불러올까요?",
+    body: `${prettyDT(backup.savedAt)} 백업 · ${d.classes.length}개 반, 수업 기록 ${(d.sessions || []).length}회<br>지금 이 폰에 있는 기록은 백업 내용으로 바뀌어요.`,
+    actions: [
+      { label: "불러오기", cls: "primary", fn: () => {
+        db = { classes: d.classes, sessions: d.sessions || [] };
+        restoring = true; persist(); restoring = false;
+        dprefs.pending = false; dprefs.lastSync = backup.savedAt; savePrefs();
+        S.view = "home"; render(); toast("백업을 불러왔어요");
+      } },
+      { label: "취소" }
+    ]
+  });
+}
+async function driveExportNow() {
+  if (!dprefs.connected) return openDriveSettings();
+  const ok = await syncDrive(true);
+  if (ok) toast(`드라이브 '${FOLDER_NAME}' 폴더에 ${XLSX_NAME}로 저장했어요`);
+  else toast("드라이브에 저장하지 못했어요. 인터넷 연결을 확인해 주세요.");
+}
+
+// 드라이브에서 명단 엑셀 고르기 (Google Picker)
+function loadPicker() {
+  return new Promise((res, rej) => {
+    if (window.google && google.picker) return res();
+    if (!window.gapi) return rej(new Error("gis_not_loaded"));
+    gapi.load("picker", { callback: res, onerror: () => rej(new Error("gis_not_loaded")) });
+  });
+}
+async function pickFromDrive() {
+  let t;
+  try { t = await getToken(true); await loadPicker(); }
+  catch (e) { return driveError(e); }
+  if (!dprefs.connected) { dprefs.connected = true; savePrefs(); }
+  const view = new google.picker.DocsView(google.picker.ViewId.DOCS)
+    .setMimeTypes([XLSX_MIME, "application/vnd.ms-excel", "text/csv", "application/vnd.google-apps.spreadsheet"].join(","))
+    .setMode(google.picker.DocsViewMode.LIST);
+  new google.picker.PickerBuilder()
+    .addView(view).setOAuthToken(t).setDeveloperKey(DRIVE.apiKey).setAppId(DRIVE.appId)
+    .setLocale("ko").setTitle("명단 엑셀 고르기")
+    .setCallback(async data => {
+      if (data.action !== google.picker.Action.PICKED) return;
+      const f = data.docs[0];
+      try {
+        toast("파일을 불러오는 중이에요");
+        const url = f.mimeType === "application/vnd.google-apps.spreadsheet"
+          ? `${API}/${f.id}/export?mimeType=${q(XLSX_MIME)}` : `${API}/${f.id}?alt=media`;
+        const buf = await (await gfetch(url, {}, true)).arrayBuffer();
+        handleBuffer(buf, f.name);
+      } catch (e) { driveError(e); }
+    })
+    .build().setVisible(true);
+}
+
+function openImportChoice() {
+  if (!driveConfigured()) return document.getElementById("file").click();
+  sheet(`<h2>명단 올리기</h2>
+    <p>첫 줄에 번호, 이름 제목이 있는 엑셀이나 구글 시트를 골라 주세요.</p>
+    <div class="acts">
+      <button class="btn primary block" id="im-drive">${ICON.drive}구글 드라이브에서 고르기</button>
+      <button class="btn block" id="im-file">${ICON.upload}이 폰에 있는 파일에서 고르기</button>
+      <button class="btn block" id="im-cancel">취소</button>
+    </div>`, (el, close) => {
+    el.querySelector("#im-drive").onclick = () => { close(); pickFromDrive(); };
+    el.querySelector("#im-file").onclick = () => { close(); document.getElementById("file").click(); };
+    el.querySelector("#im-cancel").onclick = close;
+  });
+}
+
+function openSettings() {
+  sheet(`<h2>설정</h2>
+    <div class="acts">
+      <button class="btn block" id="st-voice">${ICON.voice}음성 설정</button>
+      <button class="btn block" id="st-drive">${ICON.drive}구글 드라이브 백업</button>
+      <button class="btn block" id="st-close">닫기</button>
+    </div>`, (el, close) => {
+    el.querySelector("#st-voice").onclick = () => { close(); openVoiceSettings(); };
+    el.querySelector("#st-drive").onclick = () => { close(); openDriveSettings(); };
+    el.querySelector("#st-close").onclick = close;
+  });
+}
+function openDriveSettings() {
+  if (!driveConfigured()) {
+    return ask({ title: "구글 드라이브 연결 준비 중", body: "앱에 구글 연결 정보가 아직 들어가지 않았어요. 준비가 끝나면 이 화면에서 연결할 수 있어요.", actions: [{ label: "확인", cls: "primary" }] });
+  }
+  const c = dprefs.connected;
+  const state = !c ? "" : dprefs.pending ? "wait" : "ok";
+  const msg = !c ? "아직 연결하지 않았어요"
+    : syncing ? "백업하는 중이에요"
+    : dprefs.pending ? "백업을 기다리는 중이에요"
+    : dprefs.lastSync ? `마지막 백업 ${prettyDT(dprefs.lastSync)}` : "연결됨";
+  sheet(`<h2>구글 드라이브 백업</h2>
+    <div class="drive-status ${state}"><span class="dot"></span><span>${msg}</span></div>
+    <p>출석을 저장할 때마다 내 드라이브의 <b>'${FOLDER_NAME}'</b> 폴더에 백업 파일과 출석부 엑셀(${XLSX_NAME})을 자동으로 저장해요. 이 앱이 만든 파일만 다루고, 드라이브의 다른 파일은 보지 않아요.</p>
+    <div class="acts">
+      ${c ? `
+        <button class="btn primary block" id="dv-sync">지금 백업하기</button>
+        <button class="btn block" id="dv-restore">백업에서 불러오기</button>
+        ${dprefs.folderId ? `<a class="btn block" href="https://drive.google.com/drive/folders/${esc(dprefs.folderId)}" target="_blank" rel="noopener">드라이브 폴더 열기</a>` : ""}
+        <button class="btn danger block" id="dv-off">연결 끊기</button>`
+      : `<button class="btn primary block" id="dv-on">${ICON.drive}구글 계정 연결하기</button>`}
+      <button class="btn block" id="dv-close">닫기</button>
+    </div>`, (el, close) => {
+    const on = (id, fn) => { const b = el.querySelector(id); if (b) b.onclick = fn; };
+    on("#dv-on", () => { close(); connectDrive(); });
+    on("#dv-sync", () => { close(); syncDrive(true).then(ok => toast(ok ? "드라이브에 백업했어요" : "백업하지 못했어요. 인터넷 연결을 확인해 주세요")); });
+    on("#dv-restore", () => { close(); restoreDrive(); });
+    on("#dv-off", () => { close(); ask({ title: "드라이브 연결을 끊을까요?", body: "자동 백업이 멈춰요. 드라이브에 저장된 파일은 지워지지 않아요.", actions: [{ label: "연결 끊기", cls: "solid-danger", fn: disconnectDrive }, { label: "취소" }] }); });
+    on("#dv-close", close);
   });
 }
 
@@ -958,13 +1260,15 @@ app.addEventListener("click", e => {
   }
   const cls = getClass(S.classId);
   switch (t.dataset.act) {
-    case "import": document.getElementById("file").click(); break;
+    case "import": openImportChoice(); break;
     case "demo": loadDemo(); break;
     case "export": exportSheet(db.classes, "출석부 내보내기"); break;
     case "export-one": exportSheet([cls], `${cls.name} 내보내기`); break;
     case "save": saveSession(); break;
     case "roll": openRoll(); break;
     case "voice-set": openVoiceSettings(); break;
+    case "settings": openSettings(); break;
+    case "sync-now": syncDrive(true).then(ok => toast(ok ? "드라이브에 백업했어요" : "백업하지 못했어요. 인터넷 연결을 확인해 주세요")); break;
     case "back": history.back(); break;
     case "records":
       if (S.dirty || !S.draft.id) {
@@ -1006,6 +1310,8 @@ window.addEventListener("beforeunload", e => {
 window.__att = { parseRows, parseWorkbook, buildWorkbook, get db() { return db; } };
 
 render();
+setTimeout(() => { if (dprefs.connected && dprefs.pending) syncDrive(false); }, 1500);
+window.addEventListener("online", () => { if (dprefs.connected && dprefs.pending) syncDrive(false); });
 
 if ("serviceWorker" in navigator && location.protocol === "https:") {
   navigator.serviceWorker.register("sw.js").catch(() => {});
