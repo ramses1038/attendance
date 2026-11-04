@@ -295,6 +295,20 @@ main.wrap { padding-block: 16px 140px; display: flex; flex-direction: column; ga
 .field.no-f { width: 84px; flex: none; }
 .field.grow { flex: 1; min-width: 0; }
 .seg4 { grid-template-columns: 1fr 1fr; }
+.fmt { border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; align-self: flex-start; }
+.fmt th, .fmt td { border: 1px solid var(--line); padding: 4px 12px; text-align: center; }
+.fmt th { background: var(--accent-soft); font-weight: 600; }
+.ed-head, .ed-row { display: grid; grid-template-columns: 46px 52px 54px minmax(0, 1fr) 36px; gap: 4px; align-items: center; }
+.ed-head span { font-size: 12px; color: var(--muted); font-weight: 600; text-align: center; }
+.ed { display: flex; flex-direction: column; gap: 4px; }
+.ed-row input { min-width: 0; width: 100%; min-height: 42px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 8px; padding: 0 6px; text-align: center; font-size: 15px; font-variant-numeric: tabular-nums; }
+.ed-row input[data-k=name] { text-align: left; font-weight: 600; }
+.ed-row.bad input[data-k=name] { border: 2px solid var(--absent); background: var(--absent-bg); }
+.ed-row.bad input[data-k=name]::placeholder { color: var(--absent-ink); }
+.ed-x { border: 0; background: transparent; color: var(--muted); min-height: 42px; font-size: 16px; }
+.ed-warn { background: var(--absent-bg); color: var(--absent-ink); border-radius: 10px; padding: 10px 12px; font-weight: 600; font-size: 14px; }
+.ocr-bar { height: 8px; border-radius: 4px; background: var(--bg); overflow: hidden; }
+.ocr-bar span { display: block; height: 100%; width: 3%; background: var(--accent); transition: width .2s; }
 .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: var(--bg); border-radius: 12px; padding: 4px; }
 .seg button { border: 0; background: transparent; border-radius: 9px; min-height: 48px; font-weight: 600; font-size: 16px; color: var(--muted); }
 .seg button.on { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
@@ -312,6 +326,8 @@ main.wrap { padding-block: 16px 140px; display: flex; flex-direction: column; ga
 <body>
 <div id="app"></div>
 <input type="file" id="file" accept=".xlsx,.xls,.csv" hidden>
+<input type="file" id="photo" accept="image/*" hidden>
+<input type="file" id="cam" accept="image/*" capture="environment" hidden>
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script>
@@ -349,7 +365,7 @@ function prettyDT(dt, withTime = true) {
   return `${m}월 ${dd}일 (${w})` + (withTime && t ? ` ${t}` : "");
 }
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const byNo = (a, b) => (a.no ?? 9999) - (b.no ?? 9999) || a.name.localeCompare(b.name, "ko");
+const byNo = (a, b) => (a.no ?? 9999) - (b.no ?? 9999) || (a.ord ?? 0) - (b.ord ?? 0) || a.name.localeCompare(b.name, "ko");
 const getClass = id => db.classes.find(c => c.id === id);
 const classSessions = id => db.sessions.filter(s => s.classId === id).sort((a, b) => a.dt.localeCompare(b.dt));
 // 그 수업 시각에 명단에 있던 학생
@@ -372,6 +388,8 @@ const ICON = {
   gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
   drive: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M8.5 3h7l6 10.5-3.5 6h-12L2.5 13.5z"/><path d="M8.5 3l6 10.5h7"/><path d="M6 19.5l6-10"/></svg>',
   people: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8"/><path d="M18.5 14.3A6.5 6.5 0 0 1 21.5 20"/></svg>',
+  camera: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',
+  image: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-9 9"/></svg>',
   voice: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>'
 };
 
@@ -420,9 +438,9 @@ function renderHome() {
   if (!classes.length) {
     body = `<div class="empty">
       <h2>엑셀 명단을 올리면 반이 만들어져요</h2>
-      <p>첫 줄에 <b>번호</b>, <b>이름</b> 제목이 있는 엑셀이면 됩니다. 반마다 시트가 나뉘어 있거나 <b>반</b> 열이 있으면 여러 반을 한 번에 만들어요.</p>
+      <p><b>학년, 반, 번호, 이름</b> 순서의 표를 엑셀·구글 시트·사진으로 올리면 됩니다. 학년과 반이 있으면 여러 반을 한 번에 만들어요.</p>
       <div class="btns">
-        <button class="btn primary" data-act="import">${ICON.upload}명단 엑셀 올리기</button>
+        <button class="btn primary" data-act="import">${ICON.upload}명단 올리기</button>
         <button class="btn" data-act="demo">예시 반으로 둘러보기</button>
       </div>
     </div>`;
@@ -655,7 +673,7 @@ function openVoiceSettings() {
     el.querySelector("#v-done").onclick = () => { savePrefs(); close(); };
   });
 }
-const sayStudent = s => speak(prefs.sayNo ? `${s.no}번, ${s.name}` : s.name);
+const sayStudent = s => speak(prefs.sayNo && s.no != null ? `${s.no}번, ${s.name}` : s.name);
 
 async function keepAwake() {
   try { if (R && navigator.wakeLock) R.lock = await navigator.wakeLock.request("screen"); } catch (e) {}
@@ -683,9 +701,9 @@ function openRoll() {
 function renderRoll() {
   const s = R.list[R.i], ab = S.draft.absent.has(s.id), last = R.i === R.list.length - 1;
   R.el.innerHTML = `<div class="roll-top"><button class="btn" data-r="close">그만하기</button><span class="prog">${R.i + 1} / ${R.list.length}</span></div>
-    <div class="roll-who"><span class="no">${s.no}번</span><span class="nm">${esc(s.name)}</span></div>
+    <div class="roll-who"><span class="no">${s.no != null ? s.no + "번" : "&nbsp;"}</span><span class="nm">${esc(s.name)}</span></div>
     <button class="roll-toggle ${ab ? "absent" : ""}" data-r="toggle" aria-pressed="${ab}">${ab ? "결석" : "출석"}<small>${ab ? "누르면 출석으로" : "누르면 결석으로"}</small></button>
-    <button class="btn roll-next ${last ? "roll-done" : "primary"}" data-r="next">${last ? "완료" : "다음"}<small>${last ? "출석 저장" : esc(R.list[R.i + 1].no + "번 " + R.list[R.i + 1].name)}</small></button>
+    <button class="btn roll-next ${last ? "roll-done" : "primary"}" data-r="next">${last ? "완료" : "다음"}<small>${last ? "출석 저장" : esc((R.list[R.i + 1].no != null ? R.list[R.i + 1].no + "번 " : "") + R.list[R.i + 1].name)}</small></button>
     <button class="btn roll-again" data-r="again">다시 부르기<small>${esc(s.name)}</small></button>
     <button class="btn roll-prev" data-r="prev" ${R.i === 0 ? "disabled" : ""}>이전${R.i > 0 ? `<small>${esc(R.list[R.i - 1].name)}</small>` : ""}</button>`;
 }
@@ -789,15 +807,15 @@ function openStudent(sid) {
       <label class="field grow"><span class="label">이름</span><input id="st-name" type="text" value="${esc(s.name)}"></label>
     </div>
     <div class="set">
-      <span class="label">출석</span>
+      <span class="label">출석 제외</span>
       <div class="seg seg4" role="radiogroup">
-        <button data-off="" class="${!cur ? "on" : ""}">출석 부름</button>
         <button data-off="위탁" class="${cur === "위탁" ? "on" : ""}">위탁</button>
         <button data-off="수능 준비반" class="${cur === "수능 준비반" ? "on" : ""}">수능 준비반</button>
         <button data-off="기타" class="${custom ? "on" : ""}">기타 사유</button>
+        <button data-off="" class="${!cur ? "on" : ""}">복귀함</button>
       </div>
       <label class="field" id="st-why-f" ${custom ? "" : "hidden"}><span class="label">사유</span><input id="st-why" type="text" maxlength="10" placeholder="예: 장기 입원" value="${custom ? esc(cur) : ""}"></label>
-      <p class="help">출석 부름이 아닌 학생은 명단에 그대로 남지만 터치 출석과 음성 출석에서 빠져요. 엑셀에는 그날 칸에 사유가 적혀요.</p>
+      <p class="help">위탁·수능 준비반·기타 사유를 고른 학생은 명단에 그대로 남지만 터치 출석과 음성 출석에서 빠져요. 엑셀에는 그날 칸에 사유가 적혀요. 다시 수업에 들어오면 <b>복귀함</b>을 눌러 주세요.</p>
     </div>
     <div class="acts">
       <button class="btn primary block" id="st-save">저장</button>
@@ -821,7 +839,7 @@ function openStudent(sid) {
       setOff(s, reason, cls);
       if (reason && S.draft) S.draft.absent.delete(s.id);
       persist(); close(); renderRoster();
-      toast(reason ? `${name} 학생은 이제 출석을 부르지 않아요 (${reason})` : `${name} 학생을 저장했어요`);
+      toast(reason ? `${name} 학생은 이제 출석을 부르지 않아요 (${reason})` : `${name} 학생을 저장했어요. 출석을 불러요`);
     };
     const mv = el.querySelector("#st-move");
     if (mv) mv.onclick = () => { close(); moveStudent(cls, s, others); };
@@ -919,107 +937,286 @@ function renderRecords() {
     </div></div>`;
 }
 
-/* ---------- 엑셀 명단 읽기 ---------- */
+/* ---------- 명단 읽기 (학년 / 반 / 번호 / 이름) ---------- */
 const norm = s => String(s ?? "").replace(/\s+/g, "").trim();
 const NAME_H = /^(이름|성명|학생명|학생이름|학생성명)$/;
 const NO_H = /^(번호|번|출석번호|no\.?)$/i;
 const CLS_H = /^(반|학급|분반|학반|반명|수업반)$/;
+const GRADE_H = /^(학년)$/;
 const ID_H = /^학번$/;
+const FORMAT_HTML = `<table class="fmt"><tr><th>학년</th><th>반</th><th>번호</th><th>이름</th></tr><tr><td>3</td><td>2</td><td>1</td><td>김민성</td></tr><tr><td>3</td><td>2</td><td>2</td><td>노수진</td></tr></table>
+  <p class="help">첫 줄에 <b>학년, 반, 번호, 이름</b> 제목을 넣은 표가 가장 정확해요. 학년·반·번호는 없으면 빼도 되지만 <b>이름은 꼭 있어야</b> 해요. 학년과 반이 있으면 '3학년 2반'처럼 반이 자동으로 나뉘어요.</p>`;
+const digits = v => { const m = String(v ?? "").match(/\d+/); return m ? parseInt(m[0], 10) : null; };
+const cellText = v => String(v ?? "").trim();
+
+// 표 한 장 → [{ grade, cls, no, name, line }]
 function parseRows(rows) {
-  let h = -1, nameC = -1, noC = -1, clsC = -1, idC = -1;
+  let h = -1, C = {};
   for (let i = 0; i < Math.min(rows.length, 15); i++) {
     const r = (rows[i] || []).map(norm);
     const n = r.findIndex(c => NAME_H.test(c));
     if (n >= 0) {
-      h = i; nameC = n;
-      noC = r.findIndex(c => NO_H.test(c));
-      clsC = r.findIndex(c => CLS_H.test(c));
-      idC = r.findIndex(c => ID_H.test(c));
+      h = i;
+      C = { name: n, no: r.findIndex(c => NO_H.test(c)), cls: r.findIndex(c => CLS_H.test(c)),
+            grade: r.findIndex(c => GRADE_H.test(c)), id: r.findIndex(c => ID_H.test(c)) };
       break;
     }
   }
-  const groups = new Map();
-  const add = (k, s) => { if (!groups.has(k)) groups.set(k, []); groups.get(k).push(s); };
+  const out = [];
   if (h >= 0) {
     for (let i = h + 1; i < rows.length; i++) {
       const r = rows[i] || [];
-      const name = String(r[nameC] ?? "").trim();
-      if (!name || NAME_H.test(norm(name))) continue;
-      let no = noC >= 0 ? parseInt(String(r[noC]).replace(/\D/g, ""), 10) : NaN;
-      if (isNaN(no) && idC >= 0) { const dg = String(r[idC]).replace(/\D/g, ""); if (dg.length >= 3) no = parseInt(dg.slice(-2), 10); }
-      add(clsC >= 0 ? String(r[clsC] ?? "").trim() : "", { no: isNaN(no) ? null : no, name });
+      const name = cellText(r[C.name]);
+      const grade = C.grade >= 0 ? digits(r[C.grade]) : null;
+      const clsRaw = C.cls >= 0 ? cellText(r[C.cls]) : "";
+      let no = C.no >= 0 ? digits(r[C.no]) : null;
+      if (no == null && C.id >= 0) { const dg = String(r[C.id]).replace(/\D/g, ""); if (dg.length >= 3) no = parseInt(dg.slice(-2), 10); }
+      if (!name && grade == null && !clsRaw && no == null) continue; // 빈 줄
+      if (NAME_H.test(norm(name))) continue;
+      out.push({ grade, cls: clsRaw, no, name, line: i + 1 });
     }
   } else {
-    // 제목 줄이 없을 때: "숫자 + 한글 이름" 줄을 찾음
-    for (const r of rows) {
-      const cells = (r || []).map(c => String(c ?? "").trim());
+    // 제목 줄이 없을 때: "숫자 … 한글 이름" 줄을 찾음
+    rows.forEach((r, i) => {
+      const cells = (r || []).map(cellText);
       const ni = cells.findIndex(c => /^[가-힣]{2,5}$/.test(c));
-      if (ni < 1) continue;
-      let no = null;
-      for (let j = ni - 1; j >= 0; j--) {
-        if (/^\d{1,5}$/.test(cells[j])) { const dg = cells[j]; no = parseInt(dg.length >= 3 ? dg.slice(-2) : dg, 10); break; }
-      }
-      if (no !== null) add("", { no, name: cells[ni] });
-    }
+      if (ni < 1) return;
+      const nums = cells.slice(0, ni).filter(c => /^\d{1,5}$/.test(c)).map(Number);
+      if (!nums.length) return;
+      out.push(numsToRow(nums, cells[ni], i + 1));
+    });
   }
-  for (const list of groups.values()) {
-    let k = 0;
-    list.forEach(s => { if (s.no == null) s.no = ++k; else k = Math.max(k, s.no); });
+  return out;
+}
+// 숫자 개수로 학년/반/번호 추정 (학번 한 개면 끝 두 자리가 번호)
+function numsToRow(nums, name, line, cols) {
+  const row = { grade: null, cls: "", no: null, name, line };
+  if (cols && cols.length) {
+    cols.forEach((k, i) => { const v = nums[i]; if (v == null) return; if (k === "cls") row.cls = String(v); else row[k] = v; });
+    return row;
   }
-  return groups;
+  const n = nums.slice(-3);
+  if (n.length === 3) { row.grade = n[0]; row.cls = String(n[1]); row.no = n[2]; }
+  else if (n.length === 2) { row.cls = String(n[0]); row.no = n[1]; }
+  else { const v = n[0]; row.no = v >= 1000 ? v % 100 : v; }
+  return row;
+}
+const className = (r, def) => {
+  const c = r.cls ? (/^\d+$/.test(r.cls) ? r.cls + "반" : r.cls) : "";
+  return r.grade != null && c ? `${r.grade}학년 ${c}` : c || (r.grade != null ? `${r.grade}학년` : def);
+};
+// 줄 목록 → 반별로 묶기
+function groupRows(rows, def) {
+  const out = new Map();
+  rows.forEach((r, i) => {
+    const k = className(r, def);
+    if (!out.has(k)) out.set(k, []);
+    out.get(k).push({ no: r.no, name: r.name.trim(), ord: i });
+  });
+  return [...out].map(([name, students]) => ({ name, students: students.sort(byNo) }));
 }
 function parseWorkbook(wb, fileName) {
   const base = fileName.replace(/\.[^.]+$/, "");
   const multi = wb.SheetNames.length > 1;
-  const out = new Map();
+  const all = [];
   for (const sn of wb.SheetNames) {
     const rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, defval: "", raw: false });
-    const groups = parseRows(rows);
     const plain = /^(sheet|시트)\s*\d*$/i.test(sn.trim());
     const def = (multi || !plain) ? sn.trim() : base;
-    for (const [k, list] of groups) {
-      if (!list.length) continue;
-      const name = k ? (/^\d+$/.test(k) ? k + "반" : k) : def;
-      if (!out.has(name)) out.set(name, []);
-      out.get(name).push(...list);
-    }
+    parseRows(rows).forEach(r => all.push(Object.assign(r, { def, sheet: multi ? sn : "" })));
   }
-  return [...out].map(([name, students]) => ({ name, students: students.sort(byNo) }));
+  return all;
 }
 
-async function handleFile(file) { return handleBuffer(await file.arrayBuffer(), file.name); }
+async function handleFile(file) { return handleBuffer(await file.arrayBuffer(), file.name, file); }
 function fileKind(buf) {
-  const h = new Uint8Array(buf.slice(0, 8));
+  const h = new Uint8Array(buf.slice(0, 12));
   if (h[0] === 0xFF && h[1] === 0xD8) return "image";
   if (h[0] === 0x89 && h[1] === 0x50) return "image";
   if (h[0] === 0x52 && h[1] === 0x49 && h[2] === 0x46) return "image"; // webp
+  if (h[4] === 0x66 && h[5] === 0x74 && h[6] === 0x79 && h[7] === 0x70) return "image"; // heic
   if (h[0] === 0x25 && h[1] === 0x50 && h[2] === 0x44 && h[3] === 0x46) return "pdf";
   return "sheet";
 }
-function handleBuffer(buf, fileName) {
-  if (!window.XLSX) { toast("엑셀 도구를 불러오지 못했어요. 인터넷 연결을 확인해 주세요."); return; }
+function handleBuffer(buf, fileName, file) {
   const kind = fileKind(buf);
-  if (kind === "image") return ask({ title: "사진은 아직 읽을 수 없어요", body: "명단 사진 인식은 다음 단계에서 넣을 예정이에요. 지금은 엑셀 파일(.xlsx)을 골라 주세요.", actions: [{ label: "확인", cls: "primary" }] });
-  if (kind === "pdf") return ask({ title: "엑셀이 아니라 PDF로 받아졌어요", body: "구글 시트 파일을 휴대폰 파일 선택 창에서 고르면 PDF로 넘어올 수 있어요. 구글 시트에서 <b>파일 → 다운로드 → Microsoft Excel(.xlsx)</b>로 받은 뒤, 그 파일을 골라 주세요.", actions: [{ label: "확인", cls: "primary" }] });
-  let groups;
+  if (kind === "image") return runOcr(file || new Blob([buf]));
+  if (!window.XLSX) { toast("엑셀 도구를 불러오지 못했어요. 인터넷 연결을 확인해 주세요."); return; }
+  if (kind === "pdf") return ask({ title: "엑셀이 아니라 PDF로 받아졌어요", body: "구글 시트 파일을 휴대폰 파일 선택 창에서 고르면 PDF로 넘어올 수 있어요. <b>명단 올리기 → 구글 드라이브에서 고르기</b>를 쓰거나, 구글 시트에서 <b>파일 → 다운로드 → Microsoft Excel(.xlsx)</b>로 받은 파일을 골라 주세요.", actions: [{ label: "확인", cls: "primary" }] });
+  let rows;
+  try { rows = parseWorkbook(XLSX.read(buf, { type: "array" }), fileName); }
+  catch (e) { return ask({ title: "파일을 열지 못했어요", body: "엑셀(.xlsx, .xls), CSV 또는 구글 시트인지 확인해 주세요.", actions: [{ label: "확인", cls: "primary" }] }); }
+  if (!rows.some(r => r.name)) {
+    return ask({ title: "학생 이름을 찾지 못했어요", body: `표 첫 줄에 <b>학년, 반, 번호, 이름</b> 제목이 있는지 확인해 주세요. 이름 칸은 꼭 있어야 해요.${FORMAT_HTML}<p class="help">파일 이름: ${esc(fileName)}</p>`, actions: [{ label: "확인", cls: "primary" }] });
+  }
+  const base = fileName.replace(/\.[^.]+$/, "");
+  const missing = rows.filter(r => !r.name);
+  if (missing.length) {
+    const where = missing.slice(0, 6).map(r => `${r.sheet ? r.sheet + " " : ""}${r.line}번째 줄`).join(", ") + (missing.length > 6 ? " …" : "");
+    return ask({
+      title: `이름이 비어 있는 줄이 ${missing.length}개 있어요`,
+      body: `${where}<br>이름은 꼭 있어야 해요. 표에서 이름을 직접 넣거나, 이 줄을 빼고 만들 수 있어요.`,
+      actions: [
+        { label: "표에서 이름 넣기", cls: "primary", fn: () => openRowEditor(rows, base, "파일에서 읽은 명단") },
+        { label: "이름 없는 줄 빼고 계속", fn: () => showImportPreview(groupByDef(rows.filter(r => r.name))) },
+        { label: "취소" }
+      ]
+    });
+  }
+  showImportPreview(groupByDef(rows));
+}
+// 시트마다 기본 반 이름이 다를 수 있어서 시트별로 묶은 뒤 합침
+function groupByDef(rows) {
+  const out = new Map();
+  rows.forEach((r, i) => {
+    const k = className(r, r.def || "새 반");
+    if (!out.has(k)) out.set(k, []);
+    out.get(k).push({ no: r.no, name: r.name.trim(), ord: i });
+  });
+  return [...out].map(([name, students]) => ({ name, students: students.sort(byNo) }));
+}
+
+/* ---------- 확인·고치기 표 ---------- */
+function openRowEditor(rows, def, title) {
+  let list = rows.map(r => ({ grade: r.grade ?? "", cls: r.cls ?? "", no: r.no ?? "", name: r.name || "", def: r.def || def }));
+  sheet(`<h2>${esc(title)}</h2>
+    <p class="help">틀린 글자는 눌러서 고치고, 필요 없는 줄은 ✕로 지워 주세요. 학년·반·번호는 비워 둬도 되지만 이름은 꼭 넣어야 해요.</p>
+    <div class="ed-head"><span>학년</span><span>반</span><span>번호</span><span>이름</span><span></span></div>
+    <div class="ed" id="ed"></div>
+    <button class="btn block" id="ed-add">+ 줄 추가</button>
+    <div class="ed-warn" id="ed-warn" hidden></div>
+    <div class="acts">
+      <button class="btn primary block" id="ed-go">이 명단으로 반 만들기</button>
+      <button class="btn block" id="ed-cancel">취소</button>
+    </div>`, (el, close) => {
+    const box = el.querySelector("#ed");
+    const draw = () => {
+      box.innerHTML = list.map((r, i) => `<div class="ed-row ${r.name.trim() ? "" : "bad"}" data-i="${i}">
+        <input inputmode="numeric" data-k="grade" value="${esc(r.grade)}" aria-label="학년">
+        <input data-k="cls" value="${esc(r.cls)}" aria-label="반">
+        <input inputmode="numeric" data-k="no" value="${esc(r.no)}" aria-label="번호">
+        <input data-k="name" value="${esc(r.name)}" placeholder="이름 필요" aria-label="이름">
+        <button class="ed-x" data-x="${i}" aria-label="줄 지우기">✕</button></div>`).join("");
+    };
+    draw();
+    box.addEventListener("input", e => {
+      const row = e.target.closest(".ed-row"); if (!row) return;
+      const r = list[+row.dataset.i]; r[e.target.dataset.k] = e.target.value;
+      if (e.target.dataset.k === "name") row.classList.toggle("bad", !e.target.value.trim());
+    });
+    box.addEventListener("click", e => {
+      const x = e.target.closest("[data-x]"); if (!x) return;
+      list.splice(+x.dataset.x, 1); draw();
+    });
+    el.querySelector("#ed-add").onclick = () => {
+      const last = list[list.length - 1] || {};
+      list.push({ grade: last.grade ?? "", cls: last.cls ?? "", no: digits(last.no) != null ? digits(last.no) + 1 : "", name: "", def });
+      draw(); const ins = box.querySelectorAll('[data-k="name"]'); ins[ins.length - 1].focus();
+    };
+    el.querySelector("#ed-cancel").onclick = close;
+    el.querySelector("#ed-go").onclick = () => {
+      const empty = list.filter(r => !r.name.trim()).length;
+      const warn = el.querySelector("#ed-warn");
+      if (!list.length) { warn.hidden = false; warn.textContent = "학생이 한 명도 없어요. 줄을 추가해 주세요."; return; }
+      if (empty) {
+        warn.hidden = false; warn.textContent = `이름이 비어 있는 줄이 ${empty}개 있어요. 이름을 넣거나 ✕로 지워 주세요.`;
+        const bad = box.querySelector(".ed-row.bad input[data-k=name]"); if (bad) { bad.focus(); bad.scrollIntoView({ block: "center" }); }
+        buzz([60, 40, 60]); return;
+      }
+      close();
+      showImportPreview(groupByDef(list.map(r => ({ grade: digits(r.grade), cls: cellText(r.cls).replace(/반$/, ""), no: digits(r.no), name: r.name, def: r.def }))));
+    };
+  });
+}
+
+/* ---------- 명단 사진 인식 (폰 안에서 처리) ---------- */
+function loadScript(src) {
+  return new Promise((res, rej) => { const s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = rej; document.head.appendChild(s); });
+}
+let ocrWorker = null;
+async function getOcr(onProgress) {
+  if (!window.Tesseract) await loadScript("https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js");
+  if (!ocrWorker) {
+    ocrWorker = await Tesseract.createWorker(["kor", "eng"], 1, { logger: m => onProgress && onProgress(m) });
+    await ocrWorker.setParameters({ tessedit_pageseg_mode: "4", preserve_interword_spaces: "1" });
+  }
+  return ocrWorker;
+}
+// 크기를 맞추고 흑백·대비를 높여 글자를 잘 보이게
+async function prepImage(blob) {
+  const url = URL.createObjectURL(blob);
   try {
-    const wb = XLSX.read(buf, { type: "array" });
-    groups = parseWorkbook(wb, fileName);
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+    const scale = Math.min(2, 2000 / Math.max(img.width, img.height));
+    const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+    const c = document.createElement("canvas"); c.width = w; c.height = h;
+    const g = c.getContext("2d"); g.drawImage(img, 0, 0, w, h);
+    const d = g.getImageData(0, 0, w, h), p = d.data;
+    let lo = 255, hi = 0;
+    for (let i = 0; i < p.length; i += 16) { const v = p[i] * .3 + p[i + 1] * .59 + p[i + 2] * .11; if (v < lo) lo = v; if (v > hi) hi = v; }
+    const span = Math.max(40, hi - lo);
+    for (let i = 0; i < p.length; i += 4) {
+      let v = (p[i] * .3 + p[i + 1] * .59 + p[i + 2] * .11 - lo) * 255 / span;
+      v = v < 0 ? 0 : v > 255 ? 255 : v;
+      p[i] = p[i + 1] = p[i + 2] = v;
+    }
+    g.putImageData(d, 0, 0);
+    return c;
+  } finally { URL.revokeObjectURL(url); }
+}
+const NOT_NAME = /^(학년|번호|이름|성명|명단|출석부|학생|비고|합계)$/;
+function parseOcrText(text) {
+  const rows = []; let cols = null, afterHeader = false;
+  text.split("\n").forEach((raw, i) => {
+    const line = raw.trim(); if (!line) return;
+    const compact = line.replace(/\s+/g, "");
+    if (/(이름|성명)/.test(compact) && (/(학년|번호)/.test(compact) || /반/.test(compact.replace(/학년/g, "")))) {
+      cols = [];
+      if (/학년/.test(compact)) cols.push("grade");
+      if (/반/.test(compact.replace(/학년/g, ""))) cols.push("cls");
+      if (/번호|번/.test(compact.replace(/반/g, ""))) cols.push("no");
+      afterHeader = true; return;
+    }
+    const names = (line.match(/[가-힣]{2,5}/g) || []).filter(n => !NOT_NAME.test(n));
+    const name = names.length ? names[names.length - 1] : "";
+    const before = name ? line.slice(0, line.lastIndexOf(name)) : line;
+    const nums = (before.match(/\d+/g) || []).map(Number);
+    if (!name && !(afterHeader && nums.length)) return;
+    if (!name && !nums.length) return;
+    rows.push(numsToRow(cols && cols.length ? nums.slice(-cols.length) : nums, name, i + 1, cols));
+  });
+  return rows;
+}
+async function runOcr(blob) {
+  let closeWait;
+  const setMsg = t => { const m = document.getElementById("ocr-msg"); if (m) m.textContent = t; };
+  sheet(`<h2>명단 사진을 읽는 중이에요</h2>
+    <p id="ocr-msg">글자 인식 도구를 준비하고 있어요. 처음 한 번은 1분쯤 걸릴 수 있어요.</p>
+    <div class="ocr-bar"><span id="ocr-bar"></span></div>
+    <p class="help">사진은 이 폰 안에서만 처리되고 밖으로 보내지 않아요.</p>`, (el, close) => { closeWait = close; });
+  const bar = p => { const b = document.getElementById("ocr-bar"); if (b) b.style.width = Math.round(p * 100) + "%"; };
+  try {
+    const canvas = await prepImage(blob);
+    const w = await getOcr(m => {
+      if (m.status === "recognizing text") { setMsg("글자를 읽고 있어요"); bar(.3 + m.progress * .7); }
+      else if (/load|initializ/.test(m.status)) { setMsg("글자 인식 도구를 준비하고 있어요"); bar((m.progress || 0) * .3); }
+    });
+    const { data } = await w.recognize(canvas);
+    closeWait();
+    const rows = parseOcrText(data.text || "");
+    if (!rows.length) {
+      return ask({ title: "명단을 읽지 못했어요", body: `사진에서 학생 이름을 찾지 못했어요. 표가 화면에 꽉 차게, 밝고 흔들리지 않게 찍어 주세요. 모니터 화면을 찍은 사진보다 <b>화면 캡처</b>나 <b>인쇄물</b>이 훨씬 잘 읽혀요.${FORMAT_HTML}`,
+        actions: [{ label: "다시 찍기", cls: "primary", fn: () => pickPhoto(true) }, { label: "표에 직접 입력하기", fn: () => openRowEditor([], "새 반", "명단 직접 입력") }, { label: "닫기" }] });
+    }
+    openRowEditor(rows, "사진 명단", `사진에서 ${rows.length}명을 읽었어요`);
   } catch (e) {
-    ask({ title: "파일을 열지 못했어요", body: "엑셀(.xlsx, .xls) 또는 CSV 파일인지 확인해 주세요.", actions: [{ label: "확인", cls: "primary" }] });
-    return;
+    if (closeWait) closeWait();
+    ask({ title: "사진을 읽지 못했어요", body: "처음 사용할 때는 글자 인식 도구를 내려받아야 해서 인터넷 연결이 필요해요. 연결을 확인하고 다시 해 주세요.", actions: [{ label: "확인", cls: "primary" }] });
   }
-  if (!groups.length) {
-    let peek = "";
-    try {
-      const wb = XLSX.read(buf, { type: "array" });
-      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: "", raw: false }).slice(0, 3);
-      peek = rows.map(r => r.slice(0, 4).map(c => esc(String(c).slice(0, 12))).join(" | ")).filter(Boolean).join("<br>");
-    } catch (e) {}
-    ask({ title: "학생 이름을 찾지 못했어요", body: `첫 줄에 <b>번호</b>, <b>이름</b>(또는 성명) 제목을 넣고 다시 올려 주세요.${peek ? `<br><br>파일 첫 부분은 이렇게 읽혔어요<br><code>${peek}</code>` : "<br><br>파일에서 글자를 하나도 읽지 못했어요."}<br>파일 이름: ${esc(fileName)}`, actions: [{ label: "확인", cls: "primary" }] });
-    return;
-  }
-  showImportPreview(groups);
+}
+function pickPhoto(camera) {
+  const i = document.getElementById(camera ? "cam" : "photo");
+  i.click();
 }
 
 function showImportPreview(groups) {
@@ -1030,7 +1227,7 @@ function showImportPreview(groups) {
         <input type="checkbox" id="imp-on-${i}" checked aria-label="${esc(g.name)} 포함">
         <input type="text" id="imp-name-${i}" value="${esc(g.name)}" aria-label="반 이름">
       </div>
-      <div class="names">${g.students.length}명 · ${g.students.slice(0, 4).map(s => `${s.no} ${esc(s.name)}`).join(", ")}${g.students.length > 4 ? " …" : ""}</div>
+      <div class="names">${g.students.length}명 · ${g.students.slice(0, 4).map(s => `${s.no ?? ""} ${esc(s.name)}`.trim()).join(", ")}${g.students.length > 4 ? " …" : ""}</div>
       <div class="warn" id="imp-warn-${i}" hidden>같은 이름의 반이 있어요. 명단을 새로 맞추고, 지난 출결 기록은 그대로 둡니다.</div>
     </div>`).join("")}
     <div class="acts">
@@ -1048,7 +1245,7 @@ function showImportPreview(groups) {
         applyImport(name, g.students); made++;
       });
       if (!made) return close();
-      persist(); close(); render();
+      persist(); close(); S.view = "home"; render();
       toast(`${made}개 반 명단을 저장했어요`);
     };
   });
@@ -1058,17 +1255,17 @@ function applyImport(name, list) {
   const cls = db.classes.find(c => c.name === name);
   if (!cls) {
     db.classes.push({ id: uid(), name, createdAt: nowDT(),
-      students: list.map(s => ({ id: uid(), no: s.no, name: s.name, addedAt: null, leftAt: null })) });
+      students: list.map((s, i) => ({ id: uid(), no: s.no, ord: i, name: s.name, addedAt: null, leftAt: null, off: [] })) });
     return;
   }
   // 같은 반이면 이름으로 맞춰 기존 기록을 유지
   const now = nowDT(), used = new Set();
-  const next = list.map(s => {
+  const next = list.map((s, i) => {
     const ex = cls.students.find(x => x.name === s.name && !used.has(x.id));
-    if (ex) { used.add(ex.id); ex.no = s.no; ex.leftAt = null; return ex; }
-    return { id: uid(), no: s.no, name: s.name, addedAt: now, leftAt: null };
+    if (ex) { used.add(ex.id); ex.no = s.no; ex.ord = i; ex.leftAt = null; ex.leftNote = null; return ex; }
+    return { id: uid(), no: s.no, ord: i, name: s.name, addedAt: now, leftAt: null, off: [] };
   });
-  cls.students.forEach(s => { if (!used.has(s.id)) { if (!s.leftAt) s.leftAt = now; next.push(s); } });
+  cls.students.forEach(s => { if (!used.has(s.id)) { if (!s.leftAt) { s.leftAt = now; s.leftNote = "전출"; } next.push(s); } });
   cls.students = next;
 }
 
@@ -1381,11 +1578,11 @@ async function pickFromDrive() {
   catch (e) { return driveError(e); }
   if (!dprefs.connected) { dprefs.connected = true; savePrefs(); }
   const view = new google.picker.DocsView(google.picker.ViewId.DOCS)
-    .setMimeTypes([XLSX_MIME, "application/vnd.ms-excel", "text/csv", "application/vnd.google-apps.spreadsheet"].join(","))
+    .setMimeTypes([XLSX_MIME, "application/vnd.ms-excel", "text/csv", "application/vnd.google-apps.spreadsheet", "image/jpeg", "image/png", "image/webp"].join(","))
     .setMode(google.picker.DocsViewMode.LIST);
   new google.picker.PickerBuilder()
     .addView(view).setOAuthToken(t).setDeveloperKey(DRIVE.apiKey).setAppId(DRIVE.appId)
-    .setLocale("ko").setTitle("명단 엑셀 고르기")
+    .setLocale("ko").setTitle("명단 고르기 (학년·반·번호·이름 표)")
     .setCallback(async data => {
       if (data.action !== google.picker.Action.PICKED) return;
       const f = data.docs[0];
@@ -1401,20 +1598,27 @@ async function pickFromDrive() {
 }
 
 function openImportChoice() {
-  if (!driveConfigured() || !DRIVE.apiKey) return document.getElementById("file").click();
+  const drive = driveConfigured() && DRIVE.apiKey;
   sheet(`<h2>명단 올리기</h2>
-    <p>첫 줄에 번호, 이름 제목이 있는 엑셀이나 구글 시트를 골라 주세요.</p>
+    <p>아래 양식의 표를 엑셀, 구글 시트, 사진 중 편한 것으로 올려 주세요.</p>
+    ${FORMAT_HTML}
     <div class="acts">
-      <button class="btn primary block" id="im-drive">${ICON.drive}구글 드라이브에서 고르기</button>
-      <button class="btn block" id="im-file">${ICON.upload}이 폰에 있는 파일에서 고르기</button>
+      ${drive ? `<button class="btn primary block" id="im-drive">${ICON.drive}구글 드라이브에서 고르기</button>` : ""}
+      <button class="btn ${drive ? "" : "primary"} block" id="im-file">${ICON.upload}이 폰에 있는 엑셀 파일</button>
+      <button class="btn block" id="im-cam">${ICON.camera}명단 사진 찍기</button>
+      <button class="btn block" id="im-photo">${ICON.image}갤러리에서 명단 사진 고르기</button>
+      <button class="btn block" id="im-type">표에 직접 입력하기</button>
       <button class="btn block" id="im-cancel">취소</button>
     </div>`, (el, close) => {
-    el.querySelector("#im-drive").onclick = () => { close(); pickFromDrive(); };
-    el.querySelector("#im-file").onclick = () => { close(); document.getElementById("file").click(); };
-    el.querySelector("#im-cancel").onclick = close;
+    const on = (id, fn) => { const b = el.querySelector(id); if (b) b.onclick = () => { close(); fn(); }; };
+    on("#im-drive", pickFromDrive);
+    on("#im-file", () => document.getElementById("file").click());
+    on("#im-cam", () => pickPhoto(true));
+    on("#im-photo", () => pickPhoto(false));
+    on("#im-type", () => openRowEditor([{ grade: "", cls: "", no: 1, name: "" }], "새 반", "명단 직접 입력"));
+    on("#im-cancel", () => {});
   });
 }
-
 function openSettings() {
   sheet(`<h2>설정</h2>
     <div class="acts">
@@ -1522,10 +1726,10 @@ app.addEventListener("click", e => {
   }
 });
 
-document.getElementById("file").addEventListener("change", e => {
+["file", "photo", "cam"].forEach(id => document.getElementById(id).addEventListener("change", e => {
   const f = e.target.files[0]; e.target.value = "";
   if (f) handleFile(f);
-});
+}));
 
 // 휴대폰 뒤로 가기
 window.addEventListener("popstate", () => {
