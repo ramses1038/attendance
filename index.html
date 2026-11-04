@@ -309,6 +309,13 @@ main.wrap { padding-block: 16px 140px; display: flex; flex-direction: column; ga
 .ed-warn { background: var(--absent-bg); color: var(--absent-ink); border-radius: 10px; padding: 10px 12px; font-weight: 600; font-size: 14px; }
 .ocr-bar { height: 8px; border-radius: 4px; background: var(--bg); overflow: hidden; }
 .ocr-bar span { display: block; height: 100%; width: 3%; background: var(--accent); transition: width .2s; }
+.term-chip { align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 999px; min-height: 40px; padding: 0 12px 0 14px; font-weight: 600; font-size: 15px; }
+.term-chip svg { width: 18px; height: 18px; color: var(--muted); }
+.list-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.btn.small { min-height: 36px; padding: 0 12px; font-size: 14px; border-radius: 10px; }
+.editing-card { cursor: default; }
+.card-acts { grid-column: 1 / -1; display: flex; gap: 8px; margin-top: 8px; }
+.card-acts .btn { flex: 1; }
 .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: var(--bg); border-radius: 12px; padding: 4px; }
 .seg button { border: 0; background: transparent; border-radius: 9px; min-height: 48px; font-weight: 600; font-size: 16px; color: var(--muted); }
 .seg button.on { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
@@ -347,6 +354,17 @@ function persist() {
   catch (e) { toast("기기에 저장하지 못했어요. 휴대폰 저장 공간을 확인해 주세요."); return false; }
 }
 try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) {}
+
+/* ---------- 연도·학기 ---------- */
+// 1학기: 3~8월, 2학기: 9월~다음 해 2월
+function termOf(dt) {
+  const y = +dt.slice(0, 4), m = +dt.slice(5, 7);
+  return m >= 3 && m <= 8 ? `${y}-1` : m >= 9 ? `${y}-2` : `${y - 1}-2`;
+}
+const termLabel = t => { const [y, n] = t.split("-"); return `${y}년 ${n}학기`; };
+const termCmp = (a, b) => b.localeCompare(a);
+db.classes.forEach(c => { if (!c.term) c.term = termOf(c.createdAt || "2026-03-02 00:00"); });
+const termClasses = () => db.classes.filter(c => c.term === S.term);
 
 /* ---------- 도우미 ---------- */
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -388,6 +406,7 @@ const ICON = {
   people: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8"/><path d="M18.5 14.3A6.5 6.5 0 0 1 21.5 20"/></svg>',
   camera: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',
   image: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-9 9"/></svg>',
+  down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>',
   voice: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>'
 };
 
@@ -430,42 +449,108 @@ function render() {
 
 /* ---------- 홈: 반 선택 ---------- */
 function renderHome() {
-  const classes = [...db.classes].sort((a, b) => a.name.localeCompare(b.name, "ko", { numeric: true }));
+  const classes = termClasses().sort((a, b) => a.name.localeCompare(b.name, "ko", { numeric: true }));
   const today = prettyDT(nowDT(), false);
+  const ed = !!S.editHome;
   let body;
   if (!classes.length) {
     body = `<div class="empty">
-      <h2>엑셀 명단을 올리면 반이 만들어져요</h2>
-      <p><b>학년, 반, 번호, 이름</b> 순서의 표를 구글 드라이브나 갤러리 사진에서 고르거나 직접 입력하면 됩니다. 학년과 반이 있으면 여러 반을 한 번에 만들어요.</p>
+      <h2>${termLabel(S.term)}에 아직 반이 없어요</h2>
+      <p><b>학년, 반, 번호, 이름</b> 순서의 표를 구글 드라이브나 갤러리 사진에서 고르거나 직접 입력하면 반이 만들어져요. 학년과 반이 있으면 여러 반을 한 번에 만들어요.</p>
       <div class="btns">
         <button class="btn primary" data-act="import">${ICON.upload}명단 올리기</button>
-        <button class="btn" data-act="demo">예시 반으로 둘러보기</button>
+        ${db.classes.length ? "" : `<button class="btn" data-act="demo">예시 반으로 둘러보기</button>`}
       </div>
     </div>`;
   } else {
-    body = `<div class="label">수업할 반을 고르세요</div><div class="class-list">${classes.map(c => {
+    body = `<div class="list-head"><span class="label">${ed ? "지우거나 이름을 바꿀 반을 고르세요" : "수업할 반을 고르세요"}</span>
+      <button class="btn small ${ed ? "primary" : ""}" data-act="edit-home">${ed ? "완료" : "반 편집"}</button></div>
+      <div class="class-list">${classes.map(c => {
       const ses = classSessions(c.id);
       const last = ses[ses.length - 1];
       const lastMemo = [...ses].reverse().find(s => (s.memo || "").trim());
       const n = c.students.filter(s => !s.leftAt).length;
+      const meta = `재적 ${n}명 · ${last ? "지난 수업 " + prettyDT(last.dt) : "아직 기록 없음"}`;
+      if (ed) return `<div class="class-card editing-card">
+        <span class="name">${esc(c.name)}</span>
+        <span class="meta">${meta} · 수업 기록 ${ses.length}회</span>
+        <span class="card-acts"><button class="btn small" data-rename="${c.id}">이름 바꾸기</button><button class="btn small danger" data-delclass="${c.id}">반 지우기</button></span>
+      </div>`;
       return `<button class="class-card" data-open="${c.id}">
         <span class="name">${esc(c.name)}</span>
         <span class="chev">${ICON.chev}</span>
-        <span class="meta">재적 ${n}명 · ${last ? "지난 수업 " + prettyDT(last.dt) : "아직 기록 없음"}</span>
+        <span class="meta">${meta}</span>
         ${lastMemo ? `<span class="memo">${esc(lastMemo.memo.split("\n")[0])}</span>` : ""}
       </button>`;
     }).join("")}</div>
-    <p class="help">학생을 누르면 <b>결석</b>, 아무것도 누르지 않으면 <b>출석</b>으로 저장돼요.</p>
+    ${ed ? "" : `<p class="help">학생을 누르면 <b>결석</b>, 아무것도 누르지 않으면 <b>출석</b>으로 저장돼요.</p>`}
     <div class="sync-line" id="sync-line"></div>`;
   }
   app.innerHTML = `
     <header class="bar"><div class="wrap"><h1>수업 출석부</h1><span class="sub">${today}</span><button class="icon-btn" data-act="settings" aria-label="설정">${ICON.gear}</button></div></header>
-    <main class="wrap">${body}</main>
-    ${classes.length ? `<div class="dock"><div class="wrap">
+    <main class="wrap">
+      <button class="term-chip" data-act="term">${termLabel(S.term)}${ICON.down}</button>
+      ${body}
+    </main>
+    ${classes.length && !ed ? `<div class="dock"><div class="wrap">
       <button class="btn" data-act="import">${ICON.upload}명단 올리기</button>
       <button class="btn primary" data-act="export">${ICON.share}출석부 내보내기</button>
     </div></div>` : ""}`;
   updateSyncLine();
+}
+function setTerm(t) {
+  S.term = t; S.editHome = false; prefs.term = t; savePrefs(); render();
+}
+function openTermSheet() {
+  const set = new Set(db.classes.map(c => c.term)); set.add(S.term); set.add(termOf(nowDT()));
+  const terms = [...set].sort(termCmp);
+  const cur = termOf(nowDT());
+  sheet(`<h2>연도·학기 고르기</h2>
+    <div class="acts">${terms.map(t => {
+      const n = db.classes.filter(c => c.term === t).length;
+      return `<button class="btn block ${t === S.term ? "primary" : ""}" data-t="${t}">${termLabel(t)} · 반 ${n}개${t === cur ? " (지금 학기)" : ""}</button>`;
+    }).join("")}</div>
+    <div class="set">
+      <span class="label">다른 학기 만들기</span>
+      <div class="set-row">
+        <label class="field grow"><span class="label">연도</span><input id="tm-y" type="number" inputmode="numeric" value="${cur.slice(0, 4)}"></label>
+        <div class="seg" style="flex:1" role="radiogroup"><button data-n="1" class="${cur.endsWith("1") ? "on" : ""}">1학기</button><button data-n="2" class="${cur.endsWith("2") ? "on" : ""}">2학기</button></div>
+      </div>
+      <button class="btn block" id="tm-go">이 학기로 가기</button>
+      <p class="help">새 학기에는 반이 비어 있어요. 들어간 뒤 명단을 올리면 그 학기 반으로 만들어져요. 지난 학기 반과 기록은 그대로 남아요.</p>
+    </div>
+    <button class="btn block" id="tm-close">닫기</button>`, (el, close) => {
+    el.querySelectorAll("[data-t]").forEach(b => b.onclick = () => { close(); setTerm(b.dataset.t); });
+    let n = cur.slice(-1);
+    el.querySelectorAll("[data-n]").forEach(b => b.onclick = () => { n = b.dataset.n; el.querySelectorAll("[data-n]").forEach(x => x.classList.toggle("on", x === b)); });
+    el.querySelector("#tm-go").onclick = () => {
+      const y = parseInt(el.querySelector("#tm-y").value, 10);
+      if (!(y >= 2000 && y <= 2100)) return toast("연도를 확인해 주세요");
+      close(); setTerm(`${y}-${n}`); toast(`${y}년 ${n}학기로 왔어요`);
+    };
+    el.querySelector("#tm-close").onclick = close;
+  });
+}
+function deleteClass(cls, after) {
+  const n = classSessions(cls.id).length;
+  ask({ title: `${cls.name}을(를) 지울까요?`, body: `학생 ${cls.students.length}명의 명단과 수업 기록 ${n}회가 모두 지워지고 되돌릴 수 없어요.${n ? " 필요하면 먼저 내보내기로 엑셀을 받아 두세요." : ""}`,
+    actions: [{ label: "반 지우기", cls: "solid-danger", fn: () => {
+      db.classes = db.classes.filter(c => c.id !== cls.id);
+      db.sessions = db.sessions.filter(s => s.classId !== cls.id);
+      persist(); toast(`${cls.name}을(를) 지웠어요`); after ? after() : render(); } }, { label: "취소" }] });
+}
+function renameClass(cls) {
+  sheet(`<h2>반 이름 바꾸기</h2>
+    <label class="field"><span class="label">반 이름</span><input id="rn" type="text" value="${esc(cls.name)}"></label>
+    <div class="acts"><button class="btn primary block" id="rn-go">저장</button><button class="btn block" id="rn-x">취소</button></div>`, (el, close) => {
+    const i = el.querySelector("#rn"); setTimeout(() => i.select(), 50);
+    el.querySelector("#rn-x").onclick = close;
+    el.querySelector("#rn-go").onclick = () => {
+      const v = i.value.trim(); if (!v) return toast("반 이름을 넣어 주세요");
+      if (termClasses().some(c => c.id !== cls.id && c.name === v)) return toast("같은 학기에 같은 이름의 반이 있어요");
+      cls.name = v; persist(); close(); render(); toast("반 이름을 바꿨어요");
+    };
+  });
 }
 
 /* ---------- 반: 출석 체크 ---------- */
@@ -474,6 +559,7 @@ function openClass(id, sessionId) {
   S.draft = s ? { id: s.id, dt: s.dt, absent: new Set(s.absent), memo: s.memo || "" }
               : { id: null, dt: nowDT(), absent: new Set(), memo: "" };
   S.classId = id; S.view = "class"; S.dirty = false;
+  const c = getClass(id); if (c && prefs.term !== c.term) { prefs.term = c.term; savePrefs(); }
   history.pushState({ v: "class" }, "");
   render();
 }
@@ -798,7 +884,7 @@ function openStudent(sid) {
   }
   const cur = offNow(s);
   const custom = cur && !REASONS.includes(cur);
-  const others = db.classes.filter(c => c.id !== cls.id);
+  const others = db.classes.filter(c => c.id !== cls.id && c.term === cls.term);
   sheet(`<h2>${s.no ?? ""}번 ${esc(s.name)}</h2>
     <div class="set-row">
       <label class="field no-f"><span class="label">번호</span><input id="st-no" type="number" inputmode="numeric" value="${s.no ?? ""}"></label>
@@ -1275,7 +1361,7 @@ function pickPhoto() { document.getElementById("photo").click(); }
 
 function showImportPreview(groups) {
   sheet(`<h2>명단 ${groups.length}개 반을 찾았어요</h2>
-    <p>반 이름을 확인하고 고칠 수 있어요.</p>
+    <p><b>${termLabel(S.term)}</b> 반으로 만들어요. 반 이름을 확인하고 고칠 수 있어요.</p>
     ${groups.map((g, i) => `<div class="imp">
       <div class="row">
         <input type="checkbox" id="imp-on-${i}" checked aria-label="${esc(g.name)} 포함">
@@ -1288,7 +1374,7 @@ function showImportPreview(groups) {
       <button class="btn primary block" id="imp-go">반 만들기</button>
       <button class="btn block" id="imp-cancel">취소</button>
     </div>`, (el, close) => {
-    const check = i => { el.querySelector(`#imp-warn-${i}`).hidden = !db.classes.some(c => c.name === el.querySelector(`#imp-name-${i}`).value.trim()); };
+    const check = i => { el.querySelector(`#imp-warn-${i}`).hidden = !termClasses().some(c => c.name === el.querySelector(`#imp-name-${i}`).value.trim()); };
     groups.forEach((g, i) => { check(i); el.querySelector(`#imp-name-${i}`).oninput = () => check(i); });
     el.querySelector("#imp-cancel").onclick = close;
     el.querySelector("#imp-go").onclick = () => {
@@ -1306,9 +1392,9 @@ function showImportPreview(groups) {
 }
 
 function applyImport(name, list) {
-  const cls = db.classes.find(c => c.name === name);
+  const cls = termClasses().find(c => c.name === name);
   if (!cls) {
-    db.classes.push({ id: uid(), name, createdAt: nowDT(),
+    db.classes.push({ id: uid(), name, term: S.term, createdAt: nowDT(),
       students: list.map((s, i) => ({ id: uid(), no: s.no, ord: i, name: s.name, addedAt: null, leftAt: null, off: [] })) });
     return;
   }
@@ -1377,7 +1463,7 @@ function buildWorkbook(classes) {
 }
 function exportFile(classes) {
   const d = nowDT().slice(0, 10);
-  const label = classes.length === 1 ? classes[0].name : "전체";
+  const label = classes.length === 1 ? classes[0].name : termLabel(classes[0] ? classes[0].term : S.term).replace(/ /g, "");
   const fname = `출석부_${label}_${d}.xlsx`.replace(/[\\/:*?"<>|]/g, "_");
   const data = XLSX.write(buildWorkbook(classes), { bookType: "xlsx", type: "array" });
   const type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -1446,7 +1532,7 @@ const DRIVE = {
 const SCOPE = "https://www.googleapis.com/auth/drive.file";
 const FOLDER_NAME = "수업 출석부";
 const BACKUP_NAME = "출석부_백업.json";
-const SHEET_NAME = "출석부_전체"; // 구글 스프레드시트로 저장
+const sheetNameOf = t => `출석부_${termLabel(t).replace(/ /g, "")}`; // 학기별 구글 스프레드시트
 const GSHEET_MIME = "application/vnd.google-apps.spreadsheet";
 const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 const API = "https://www.googleapis.com/drive/v3/files";
@@ -1530,7 +1616,9 @@ function syncDrive(interactive) {
     try {
       const backup = { app: "attendance-book", version: 1, savedAt: nowDT(), data: db };
       await upsert(BACKUP_NAME, "application/json", new Blob([JSON.stringify(backup)], { type: "application/json" }), "backupId", interactive);
-      if (window.XLSX && db.classes.length) await upsert(SHEET_NAME, GSHEET_MIME, exportFile(db.classes).blob, "sheetId", interactive);
+      // 지금 보고 있는 학기의 출석부 시트 (예: 출석부_2026년2학기)
+      const cur = termClasses();
+      if (window.XLSX && cur.length) await upsert(sheetNameOf(S.term), GSHEET_MIME, exportFile(cur).blob, "sheet_" + S.term, interactive);
       dprefs.lastSync = nowDT(); dprefs.pending = false; dprefs.lastError = ""; savePrefs();
       return true;
     } catch (e) {
@@ -1603,6 +1691,8 @@ async function restoreDrive() {
     actions: [
       { label: "불러오기", cls: "primary", fn: () => {
         db = { classes: d.classes, sessions: d.sessions || [] };
+        db.classes.forEach(c => { if (!c.term) c.term = termOf(c.createdAt || nowDT()); });
+        S.term = startTerm();
         restoring = true; persist(); restoring = false;
         dprefs.pending = false; dprefs.lastSync = backup.savedAt; savePrefs();
         S.view = "home"; render(); toast("백업을 불러왔어요");
@@ -1614,7 +1704,7 @@ async function restoreDrive() {
 async function driveExportNow() {
   if (!dprefs.connected) return openDriveSettings();
   const ok = await syncDrive(true);
-  if (ok) toast(`드라이브 '${FOLDER_NAME}' 폴더의 '${SHEET_NAME}' 구글 시트에 저장했어요`);
+  if (ok) toast(`드라이브 '${FOLDER_NAME}' 폴더의 '${sheetNameOf(S.term)}' 구글 시트에 저장했어요`);
   else toast("드라이브에 저장하지 못했어요. 인터넷 연결을 확인해 주세요.");
 }
 
@@ -1693,7 +1783,7 @@ function openDriveSettings() {
     : dprefs.lastSync ? `마지막 백업 ${prettyDT(dprefs.lastSync)}` : "연결됨";
   sheet(`<h2>구글 드라이브 백업</h2>
     <div class="drive-status ${state}"><span class="dot"></span><span>${msg}</span></div>
-    <p>출석을 저장할 때마다 내 드라이브의 <b>'${FOLDER_NAME}'</b> 폴더에 백업 파일과 출석부 구글 시트('${SHEET_NAME}')를 자동으로 저장해요. 이 앱이 만든 파일만 다루고, 드라이브의 다른 파일은 보지 않아요.</p>
+    <p>출석을 저장할 때마다 내 드라이브의 <b>'${FOLDER_NAME}'</b> 폴더에 백업 파일과 학기별 출석부 구글 시트('${sheetNameOf(S.term)}' 등)를 자동으로 저장해요. 이 앱이 만든 파일만 다루고, 드라이브의 다른 파일은 보지 않아요.</p>
     <div class="acts">
       ${c ? `
         <button class="btn primary block" id="dv-sync">지금 백업하기</button>
@@ -1715,7 +1805,7 @@ function openDriveSettings() {
 /* ---------- 예시 반 ---------- */
 function loadDemo() {
   const names = ["강민준","김서연","김하준","박지우","박도윤","이서윤","이시우","정하은","최지호","한수아","오예준","윤채원","임건우","장유나","조은우","황지민"];
-  const cls = { id: uid(), name: "예시 2학년 3반", createdAt: nowDT(),
+  const cls = { id: uid(), name: "예시 2학년 3반", term: S.term, createdAt: nowDT(),
     students: names.map((n, i) => ({ id: uid(), no: i + 1, name: n, addedAt: null, leftAt: null })) };
   db.classes.push(cls);
   const day = k => { const d = new Date(); d.setDate(d.getDate() - k); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
@@ -1724,7 +1814,7 @@ function loadDemo() {
     { id: uid(), classId: cls.id, dt: `${day(2)} 13:20`, absent: [cls.students[5].id, cls.students[11].id], memo: "2단원 매체 언어의 특성 — 활동지 3번까지" }
   );
   persist(); render();
-  toast("예시 반을 만들었어요. 다 보셨으면 기록 화면에서 지울 수 있어요");
+  toast("예시 반을 만들었어요. 다 보셨으면 '반 편집'에서 지울 수 있어요");
 }
 
 /* ---------- 이벤트 ---------- */
@@ -1734,6 +1824,8 @@ app.addEventListener("click", e => {
   if (t.dataset.sid) return toggle(t.dataset.sid);
   if (t.dataset.open) return openClass(t.dataset.open);
   if (t.dataset.stu) return openStudent(t.dataset.stu);
+  if (t.dataset.delclass) return deleteClass(getClass(t.dataset.delclass));
+  if (t.dataset.rename) return renameClass(getClass(t.dataset.rename));
   if (t.dataset.edit) { S.view = "class"; const s = db.sessions.find(x => x.id === t.dataset.edit);
     S.draft = { id: s.id, dt: s.dt, absent: new Set(s.absent), memo: s.memo || "" }; S.dirty = false; return render(); }
   if (t.dataset.del) {
@@ -1745,7 +1837,9 @@ app.addEventListener("click", e => {
   switch (t.dataset.act) {
     case "import": openImportChoice(); break;
     case "demo": loadDemo(); break;
-    case "export": exportSheet(db.classes, "출석부 내보내기"); break;
+    case "export": exportSheet(termClasses(), `${termLabel(S.term)} 출석부 내보내기`); break;
+    case "term": openTermSheet(); break;
+    case "edit-home": S.editHome = !S.editHome; render(); break;
     case "export-one": exportSheet([cls], `${cls.name} 내보내기`); break;
     case "save": saveSession(); break;
     case "roll": openRoll(); break;
@@ -1767,11 +1861,7 @@ app.addEventListener("click", e => {
     case "to-class": case "new-session":
       S.draft = { id: null, dt: nowDT(), absent: new Set(), memo: "" }; S.dirty = false; S.view = "class"; render(); break;
     case "del-class":
-      ask({ title: `${cls.name}을(를) 지울까요?`, body: "학생 명단과 출결 기록이 모두 지워지고 되돌릴 수 없어요. 필요하면 먼저 내보내기로 엑셀을 받아 두세요.",
-        actions: [{ label: "반 지우기", cls: "solid-danger", fn: () => {
-          db.classes = db.classes.filter(c => c.id !== cls.id);
-          db.sessions = db.sessions.filter(s => s.classId !== cls.id);
-          persist(); S.view = "home"; S.classId = null; history.back(); render(); toast("반을 지웠어요"); } }, { label: "취소" }] });
+      deleteClass(cls, () => { S.view = "home"; S.classId = null; history.back(); render(); });
       break;
   }
 });
@@ -1792,6 +1882,17 @@ window.addEventListener("beforeunload", e => {
 
 // 테스트용으로 바깥에 노출
 window.__att = { parseRows, parseWorkbook, buildWorkbook, get db() { return db; } };
+
+// 앱을 열면 마지막으로 쓰던 학기로 (없으면 가장 최근 수업한 반의 학기, 그것도 없으면 지금 학기)
+function startTerm() {
+  if (prefs.term) return prefs.term;
+  const last = [...db.sessions].sort((a, b) => b.dt.localeCompare(a.dt))[0];
+  const c = last && getClass(last.classId);
+  if (c) return c.term;
+  const terms = [...new Set(db.classes.map(c => c.term))].sort(termCmp);
+  return terms[0] || termOf(nowDT());
+}
+S.term = startTerm();
 
 document.getElementById("photo").addEventListener("change", e => {
   const f = e.target.files[0]; e.target.value = "";
