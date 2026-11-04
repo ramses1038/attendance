@@ -1,0 +1,932 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#F2F4F7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0F1620" media="(prefers-color-scheme: dark)">
+<title>수업 출석부</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="출석부">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="xlsx.full.min.js"></script>
+<script>
+  if (!window.XLSX) document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"><\/script>');
+</script>
+<style>
+/* 레이아웃: 한 줄 세로 기둥(최대 720px) — 위 고정 머리줄, 학생 칸 격자, 아래 고정 저장 막대 */
+:root {
+  --bg: #F2F4F7;
+  --surface: #FFFFFF;
+  --ink: #18263A;
+  --muted: #5D6B7E;
+  --line: #D9DFE7;
+  --accent: #2C5A8C;
+  --accent-ink: #FFFFFF;
+  --accent-soft: #E3ECF6;
+  --absent: #C2412F;
+  --absent-bg: #FBE6E2;
+  --absent-ink: #8E2A1D;
+  --shadow: 0 1px 2px rgba(24,38,58,.06), 0 4px 14px rgba(24,38,58,.06);
+  --display: "Do Hyeon", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --body: "IBM Plex Sans KR", -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
+  --r: 14px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F1620; --surface: #18222F; --ink: #E6EBF2; --muted: #93A1B3; --line: #2A3646;
+    --accent: #84B2E3; --accent-ink: #0F1620; --accent-soft: #1F3246;
+    --absent: #FF8C7C; --absent-bg: #3B2020; --absent-ink: #FFC4BA;
+    --shadow: 0 1px 2px rgba(0,0,0,.3);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F1620; --surface: #18222F; --ink: #E6EBF2; --muted: #93A1B3; --line: #2A3646;
+  --accent: #84B2E3; --accent-ink: #0F1620; --accent-soft: #1F3246;
+  --absent: #FF8C7C; --absent-bg: #3B2020; --absent-ink: #FFC4BA;
+  --shadow: 0 1px 2px rgba(0,0,0,.3);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--ink);
+  font: 15px/1.55 var(--body);
+  -webkit-tap-highlight-color: transparent;
+  word-break: keep-all;
+  min-height: 100dvh;
+}
+button, input, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+[hidden] { display: none !important; }
+
+.wrap {
+  max-width: 720px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+
+/* 머리줄 */
+.bar {
+  position: sticky; top: 0; z-index: 5;
+  background: var(--bg);
+  padding-top: env(safe-area-inset-top, 0px);
+  border-bottom: 1px solid var(--line);
+}
+.bar .wrap { display: flex; align-items: center; gap: 8px; min-height: 58px; padding-block: 6px; }
+.bar h1 { font: 26px/1.1 var(--display); margin: 0; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar .sub { color: var(--muted); font-size: 13px; white-space: nowrap; }
+.icon-btn {
+  border: 0; background: transparent; border-radius: 10px;
+  min-width: 44px; height: 44px; padding: 0 10px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+  color: var(--ink); font-weight: 500;
+}
+.icon-btn:active { background: var(--accent-soft); }
+.icon-btn svg { width: 22px; height: 22px; }
+
+main.wrap { padding-block: 16px 140px; display: flex; flex-direction: column; gap: 16px; }
+
+/* 버튼 */
+.btn {
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+  border-radius: 12px; min-height: 48px; padding: 0 16px; font-weight: 600;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+}
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.danger { color: var(--absent); }
+.btn.solid-danger { background: var(--absent); border-color: var(--absent); color: #fff; }
+.btn:active { transform: translateY(1px); }
+.btn.block { width: 100%; }
+.btn:disabled { opacity: .35; cursor: default; }
+.btn svg { width: 20px; height: 20px; }
+
+.label { font-size: 12px; font-weight: 600; letter-spacing: .06em; color: var(--muted); }
+
+/* 반 목록 */
+.class-list { display: flex; flex-direction: column; gap: 10px; }
+.class-card {
+  text-align: left; width: 100%;
+  border: 1px solid var(--line); background: var(--surface); border-radius: var(--r);
+  padding: 14px 16px; display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; align-items: center;
+  box-shadow: var(--shadow);
+}
+.class-card .name { font: 24px/1.2 var(--display); }
+.class-card .meta { grid-column: 1; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.class-card .memo { grid-column: 1 / -1; margin-top: 6px; font-size: 14px; color: var(--ink); background: var(--bg); border-radius: 8px; padding: 6px 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.class-card .chev { grid-row: 1 / span 2; grid-column: 2; color: var(--muted); }
+
+.empty {
+  border: 1.5px dashed var(--line); border-radius: var(--r); padding: 28px 20px;
+  text-align: center; display: flex; flex-direction: column; gap: 12px; align-items: center;
+}
+.empty h2 { font: 24px/1.3 var(--display); margin: 0; text-wrap: balance; }
+.empty p { margin: 0; color: var(--muted); max-width: 34em; }
+.empty .btns { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+
+.help { color: var(--muted); font-size: 13px; }
+.help b { color: var(--ink); font-weight: 600; }
+
+/* 지난 진도 */
+.prev {
+  background: var(--accent-soft); border-radius: var(--r); padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.prev .when { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.prev .text { white-space: pre-wrap; font-size: 15px; }
+.prev.none .text { color: var(--muted); }
+
+/* 일시 + 재적 */
+.session-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
+.dt-field { display: flex; align-items: center; gap: 8px; }
+.dt-field input {
+  border: 1px solid var(--line); background: var(--surface); border-radius: 10px;
+  min-height: 44px; padding: 0 10px; font-variant-numeric: tabular-nums;
+}
+.tally { display: flex; gap: 6px; font-variant-numeric: tabular-nums; }
+.tally span { border-radius: 999px; padding: 4px 10px; font-size: 13px; font-weight: 600; background: var(--surface); border: 1px solid var(--line); }
+.tally .abs { background: var(--absent-bg); color: var(--absent-ink); border-color: transparent; }
+.editing { font-size: 13px; color: var(--accent); font-weight: 600; }
+
+/* 학생 칸 */
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+.tile {
+  position: relative; border: 1px solid var(--line); background: var(--surface);
+  border-radius: 12px; min-height: 78px; padding: 22px 6px 10px;
+  display: flex; align-items: center; justify-content: center; text-align: center;
+  font-size: 18px; font-weight: 600; line-height: 1.2; word-break: keep-all;
+  transition: background .12s, border-color .12s;
+  touch-action: manipulation; user-select: none;
+}
+.tile .no { position: absolute; top: 6px; left: 9px; font-size: 13px; font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; }
+.tile .mark { position: absolute; top: 6px; right: 8px; font-size: 12px; font-weight: 700; color: var(--absent-ink); }
+.tile.absent { background: var(--absent-bg); border-color: var(--absent); color: var(--absent-ink); }
+.tile.absent .name { text-decoration: line-through; text-decoration-thickness: 2px; }
+
+/* 메모 */
+.memo-field { display: flex; flex-direction: column; gap: 6px; }
+.memo-field textarea {
+  border: 1px solid var(--line); background: var(--surface); border-radius: 12px;
+  padding: 10px 12px; min-height: 84px; resize: vertical; line-height: 1.5;
+}
+
+/* 아래 고정 막대 */
+.dock {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  border-top: 1px solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.dock .wrap { display: flex; gap: 8px; padding-block: 10px; }
+.dock .btn { flex: 1; min-height: 54px; font-size: 16px; }
+
+/* 기록 목록 */
+.records { display: flex; flex-direction: column; gap: 8px; }
+.rec {
+  border: 1px solid var(--line); background: var(--surface); border-radius: var(--r);
+  padding: 12px 14px; display: grid; grid-template-columns: 1fr auto; gap: 4px 10px;
+}
+.rec .when { font-weight: 600; font-variant-numeric: tabular-nums; }
+.rec .abs { font-size: 14px; color: var(--muted); }
+.rec .abs b { color: var(--absent-ink); font-weight: 600; }
+.rec .memo { grid-column: 1 / -1; font-size: 14px; white-space: pre-wrap; }
+.rec .acts { grid-row: 1 / span 2; grid-column: 2; display: flex; gap: 4px; }
+.rec .acts .btn { min-height: 40px; padding: 0 12px; font-size: 14px; }
+
+/* 시트(모달) */
+.scrim {
+  position: fixed; inset: 0; z-index: 20; background: rgba(10,16,24,.45);
+  display: flex; align-items: flex-end; justify-content: center;
+}
+.sheet {
+  background: var(--surface); width: 100%; max-width: 560px; max-height: 88dvh; overflow: auto;
+  border-radius: 20px 20px 0 0; padding: 20px max(16px, env(safe-area-inset-right, 0px)) calc(20px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+  display: flex; flex-direction: column; gap: 14px;
+}
+@media (min-width: 640px) { .scrim { align-items: center; } .sheet { border-radius: 20px; } }
+.sheet h2 { font: 24px/1.25 var(--display); margin: 0; text-wrap: balance; }
+.sheet p { margin: 0; color: var(--muted); }
+.sheet .acts { display: flex; flex-direction: column; gap: 8px; }
+.imp {
+  border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 8px;
+}
+.imp .row { display: flex; gap: 8px; align-items: center; }
+.imp input[type=text] { flex: 1; min-width: 0; border: 1px solid var(--line); background: var(--bg); border-radius: 10px; min-height: 44px; padding: 0 10px; font-weight: 600; }
+.imp input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--accent); }
+.imp .names { font-size: 13px; color: var(--muted); }
+.imp .warn { font-size: 13px; color: var(--accent); }
+
+.toast {
+  position: fixed; left: 50%; transform: translateX(-50%); z-index: 30;
+  bottom: calc(86px + env(safe-area-inset-bottom, 0px));
+  background: var(--ink); color: var(--bg); border-radius: 12px; padding: 10px 16px;
+  font-size: 14px; max-width: calc(100% - 32px); box-shadow: var(--shadow);
+}
+/* 음성 출석 */
+.roll {
+  position: fixed; inset: 0; z-index: 15; background: var(--bg);
+  display: flex; flex-direction: column; gap: 12px;
+  padding: calc(10px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) calc(14px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+  max-width: 720px; margin: 0 auto;
+}
+.roll-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.roll-top .prog { font: 22px/1 var(--display); font-variant-numeric: tabular-nums; color: var(--muted); }
+.roll-who { text-align: center; display: flex; flex-direction: column; gap: 2px; padding-block: 4px; }
+.roll-who .no { font: 26px/1 var(--display); color: var(--muted); font-variant-numeric: tabular-nums; }
+.roll-who .nm { font: clamp(44px, 14vw, 72px)/1.1 var(--display); word-break: keep-all; }
+.roll-toggle {
+  flex: 1; min-height: 160px; border-radius: 24px; border: 3px solid var(--line);
+  background: var(--surface); color: var(--ink);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  font: 52px/1 var(--display); touch-action: manipulation;
+}
+.roll-toggle small { font: 500 15px/1.3 var(--body); color: var(--muted); }
+.roll-toggle.absent { background: var(--absent); border-color: var(--absent); color: #fff; }
+.roll-toggle.absent small { color: rgba(255,255,255,.85); }
+.roll-nav { display: grid; grid-template-columns: 1fr 1.25fr 1fr; gap: 10px; }
+.roll-nav .btn { min-height: 104px; border-radius: 20px; font-size: 19px; flex-direction: column; gap: 2px; padding: 0 8px; }
+.roll-nav .btn small { font-size: 13px; font-weight: 500; opacity: .8; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.roll-start { flex: 1; display: flex; flex-direction: column; gap: 16px; justify-content: center; text-align: center; }
+.roll-start h2 { font: 30px/1.25 var(--display); margin: 0; text-wrap: balance; }
+.roll-start p { margin: 0; color: var(--muted); }
+.roll-start .vol { background: var(--accent-soft); border-radius: var(--r); padding: 14px; color: var(--ink); font-weight: 500; }
+.roll-start .btn { min-height: 120px; font-size: 26px; border-radius: 24px; }
+.roll-opt { display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--muted); }
+.roll-opt input { width: 22px; height: 22px; accent-color: var(--accent); }
+.roll-done { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<input type="file" id="file" accept=".xlsx,.xls,.csv" hidden>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+(() => {
+"use strict";
+
+/* ---------- 저장소 ---------- */
+const KEY = "attendance-book.v1";
+let db = load();
+function load() {
+  try {
+    const d = JSON.parse(localStorage.getItem(KEY));
+    if (d && Array.isArray(d.classes)) return { classes: d.classes, sessions: d.sessions || [] };
+  } catch (e) {}
+  return { classes: [], sessions: [] };
+}
+function persist() {
+  try { localStorage.setItem(KEY, JSON.stringify(db)); return true; }
+  catch (e) { toast("기기에 저장하지 못했어요. 휴대폰 저장 공간을 확인해 주세요."); return false; }
+}
+try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) {}
+
+/* ---------- 도우미 ---------- */
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const pad = n => String(n).padStart(2, "0");
+function nowDT() {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+const WD = "일월화수목금토";
+function prettyDT(dt, withTime = true) {
+  const [d, t] = dt.split(" ");
+  const [y, m, dd] = d.split("-").map(Number);
+  const w = WD[new Date(y, m - 1, dd).getDay()];
+  return `${m}월 ${dd}일 (${w})` + (withTime && t ? ` ${t}` : "");
+}
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const byNo = (a, b) => (a.no ?? 9999) - (b.no ?? 9999) || a.name.localeCompare(b.name, "ko");
+const getClass = id => db.classes.find(c => c.id === id);
+const classSessions = id => db.sessions.filter(s => s.classId === id).sort((a, b) => a.dt.localeCompare(b.dt));
+// 그 수업 시각에 명단에 있던 학생
+const activeAt = (cls, dt) => cls.students
+  .filter(s => (!s.addedAt || s.addedAt <= dt) && (!s.leftAt || s.leftAt > dt))
+  .sort(byNo);
+function buzz(ms) { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) {} }
+
+const ICON = {
+  back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
+  chev: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>',
+  share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 8l5-5 5 5"/><path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></svg>',
+  upload: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 18v-6"/><path d="M9 15l3-3 3 3"/></svg>',
+  list: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>',
+  voice: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>'
+};
+
+/* ---------- 알림 / 시트 ---------- */
+let toastTimer;
+function toast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => (t.hidden = true), 2600);
+}
+function sheet(html, mount) {
+  const scrim = document.createElement("div");
+  scrim.className = "scrim";
+  scrim.innerHTML = `<div class="sheet" role="dialog" aria-modal="true">${html}</div>`;
+  document.body.appendChild(scrim);
+  const close = () => scrim.remove();
+  scrim.addEventListener("click", e => { if (e.target === scrim) close(); });
+  mount && mount(scrim.querySelector(".sheet"), close);
+  return close;
+}
+function ask({ title, body = "", actions }) {
+  sheet(`<h2>${esc(title)}</h2>${body ? `<p>${body}</p>` : ""}<div class="acts">${
+    actions.map((a, i) => `<button class="btn block ${a.cls || ""}" data-i="${i}">${esc(a.label)}</button>`).join("")
+  }</div>`, (el, close) => {
+    el.querySelectorAll("[data-i]").forEach(b => b.onclick = () => { close(); const f = actions[+b.dataset.i].fn; f && f(); });
+  });
+}
+
+/* ---------- 화면 상태 ---------- */
+const app = document.getElementById("app");
+let S = { view: "home", classId: null, draft: null, dirty: false };
+
+function render() {
+  if (S.view === "home") renderHome();
+  else if (S.view === "class") renderClass();
+  else if (S.view === "records") renderRecords();
+  window.scrollTo(0, 0);
+}
+
+/* ---------- 홈: 반 선택 ---------- */
+function renderHome() {
+  const classes = [...db.classes].sort((a, b) => a.name.localeCompare(b.name, "ko", { numeric: true }));
+  const today = prettyDT(nowDT(), false);
+  let body;
+  if (!classes.length) {
+    body = `<div class="empty">
+      <h2>엑셀 명단을 올리면 반이 만들어져요</h2>
+      <p>첫 줄에 <b>번호</b>, <b>이름</b> 제목이 있는 엑셀이면 됩니다. 반마다 시트가 나뉘어 있거나 <b>반</b> 열이 있으면 여러 반을 한 번에 만들어요.</p>
+      <div class="btns">
+        <button class="btn primary" data-act="import">${ICON.upload}명단 엑셀 올리기</button>
+        <button class="btn" data-act="demo">예시 반으로 둘러보기</button>
+      </div>
+    </div>`;
+  } else {
+    body = `<div class="label">수업할 반을 고르세요</div><div class="class-list">${classes.map(c => {
+      const ses = classSessions(c.id);
+      const last = ses[ses.length - 1];
+      const lastMemo = [...ses].reverse().find(s => (s.memo || "").trim());
+      const n = c.students.filter(s => !s.leftAt).length;
+      return `<button class="class-card" data-open="${c.id}">
+        <span class="name">${esc(c.name)}</span>
+        <span class="chev">${ICON.chev}</span>
+        <span class="meta">재적 ${n}명 · ${last ? "지난 수업 " + prettyDT(last.dt) : "아직 기록 없음"}</span>
+        ${lastMemo ? `<span class="memo">${esc(lastMemo.memo.split("\n")[0])}</span>` : ""}
+      </button>`;
+    }).join("")}</div>
+    <p class="help">학생을 누르면 <b>결석</b>, 아무것도 누르지 않으면 <b>출석</b>으로 저장돼요.</p>`;
+  }
+  app.innerHTML = `
+    <header class="bar"><div class="wrap"><h1>수업 출석부</h1><span class="sub">${today}</span></div></header>
+    <main class="wrap">${body}</main>
+    ${classes.length ? `<div class="dock"><div class="wrap">
+      <button class="btn" data-act="import">${ICON.upload}명단 올리기</button>
+      <button class="btn primary" data-act="export">${ICON.share}출석부 내보내기</button>
+    </div></div>` : ""}`;
+}
+
+/* ---------- 반: 출석 체크 ---------- */
+function openClass(id, sessionId) {
+  const s = sessionId && db.sessions.find(x => x.id === sessionId);
+  S.draft = s ? { id: s.id, dt: s.dt, absent: new Set(s.absent), memo: s.memo || "" }
+              : { id: null, dt: nowDT(), absent: new Set(), memo: "" };
+  S.classId = id; S.view = "class"; S.dirty = false;
+  history.pushState({ v: "class" }, "");
+  render();
+}
+
+function prevMemo(cls) {
+  const d = S.draft;
+  return classSessions(cls.id)
+    .filter(s => s.id !== d.id && (s.memo || "").trim() && (!d.id || s.dt < d.dt))
+    .pop();
+}
+
+function renderClass() {
+  const cls = getClass(S.classId);
+  if (!cls) { S.view = "home"; return render(); }
+  const d = S.draft;
+  const studs = activeAt(cls, d.dt);
+  const absentN = studs.filter(s => d.absent.has(s.id)).length;
+  const pm = prevMemo(cls);
+  app.innerHTML = `
+    <header class="bar"><div class="wrap">
+      <button class="icon-btn" data-act="back" aria-label="반 목록으로">${ICON.back}</button>
+      <h1>${esc(cls.name)}</h1>
+      <button class="icon-btn" data-act="records">${ICON.list}기록</button>
+    </div></header>
+    <main class="wrap">
+      <section class="prev ${pm ? "" : "none"}">
+        <span class="label">지난 시간 진도</span>
+        ${pm ? `<span class="when">${prettyDT(pm.dt)}</span><span class="text">${esc(pm.memo)}</span>`
+             : `<span class="text">아직 남긴 진도 메모가 없어요.</span>`}
+      </section>
+
+      <div class="session-head">
+        <label class="dt-field"><span class="label">수업 일시</span>
+          <input type="datetime-local" id="dt" value="${d.dt.replace(" ", "T")}" step="60">
+        </label>
+        <div class="tally" id="tally">${tallyHTML(studs.length, absentN)}</div>
+      </div>
+      ${d.id ? `<div class="editing">저장된 기록을 고치는 중이에요</div>` : ""}
+
+      <div class="grid" id="grid">${studs.length ? studs.map(s => tileHTML(s, d.absent.has(s.id))).join("")
+        : `<p class="help">이 반에 학생이 없어요.</p>`}</div>
+
+      <label class="memo-field"><span class="label">오늘 진도 (선택)</span>
+        <textarea id="memo" placeholder="예: 2단원 매체 언어의 특성, 활동지 3번까지">${esc(d.memo)}</textarea>
+      </label>
+    </main>
+    <div class="dock"><div class="wrap">
+      ${studs.length ? `<button class="btn" data-act="roll">${ICON.voice}음성 출석</button>` : ""}
+      <button class="btn primary" data-act="save">${d.id ? "고친 내용 저장" : "출석 저장"}</button>
+    </div></div>`;
+
+  document.getElementById("memo").oninput = e => { d.memo = e.target.value; S.dirty = true; };
+  document.getElementById("dt").onchange = e => {
+    if (!e.target.value) return;
+    d.dt = e.target.value.replace("T", " ").slice(0, 16); S.dirty = true;
+    renderClass();
+  };
+}
+const tallyHTML = (n, a) => `<span>재적 ${n}</span><span>출석 ${n - a}</span><span class="abs">결석 ${a}</span>`;
+const tileHTML = (s, absent) => `<button class="tile ${absent ? "absent" : ""}" data-sid="${s.id}" aria-pressed="${absent}">
+  <span class="no">${s.no ?? ""}</span>${absent ? '<span class="mark">결석</span>' : ""}<span class="name">${esc(s.name)}</span></button>`;
+
+function toggle(sid) {
+  const d = S.draft; const cls = getClass(S.classId);
+  if (d.absent.has(sid)) { d.absent.delete(sid); buzz(15); } else { d.absent.add(sid); buzz([30, 40, 30]); }
+  S.dirty = true;
+  const s = cls.students.find(x => x.id === sid);
+  const tile = document.querySelector(`[data-sid="${sid}"]`);
+  tile.outerHTML = tileHTML(s, d.absent.has(sid));
+  const studs = activeAt(cls, d.dt);
+  document.getElementById("tally").innerHTML = tallyHTML(studs.length, studs.filter(x => d.absent.has(x.id)).length);
+}
+
+function saveSession() {
+  const d = S.draft; const cls = getClass(S.classId);
+  const ids = new Set(activeAt(cls, d.dt).map(s => s.id));
+  const rec = { id: d.id || uid(), classId: cls.id, dt: d.dt, absent: [...d.absent].filter(id => ids.has(id)), memo: d.memo.trim() };
+  const i = db.sessions.findIndex(s => s.id === rec.id);
+  if (i >= 0) db.sessions[i] = rec; else db.sessions.push(rec);
+  if (!persist()) return false;
+  const wasNew = !d.id;
+  d.id = rec.id; S.dirty = false;
+  toast(`${prettyDT(rec.dt)} 출석을 저장했어요 (결석 ${rec.absent.length}명)`);
+  if (wasNew) renderClass();
+  return true;
+}
+
+function leaveClass(after) {
+  const go = () => { S.view = "home"; S.draft = null; after ? after() : render(); };
+  const d = S.draft;
+  if (S.view === "class" && d && (!d.id || S.dirty)) {
+    ask({
+      title: d.id ? "고친 내용을 저장할까요?" : "출석을 저장하지 않았어요",
+      body: d.id ? "저장하지 않으면 바꾼 내용이 사라져요." : "저장하지 않고 나가면 이번 수업 출석이 기록되지 않아요.",
+      actions: [
+        { label: "저장하고 나가기", cls: "primary", fn: () => { if (saveSession()) go(); } },
+        { label: "저장하지 않고 나가기", cls: "danger", fn: go },
+        { label: "계속 체크하기", fn: () => history.pushState({ v: "class" }, "") }
+      ]
+    });
+  } else go();
+}
+
+/* ---------- 음성 출석 ---------- */
+let R = null; // { list, i, el, lock }
+const prefs = (() => { try { return JSON.parse(localStorage.getItem(KEY + ".prefs")) || {}; } catch (e) { return {}; } })();
+if (prefs.sayNo === undefined) prefs.sayNo = true;
+function savePrefs() { try { localStorage.setItem(KEY + ".prefs", JSON.stringify(prefs)); } catch (e) {} }
+
+let koVoice = null;
+function pickVoice() {
+  try {
+    const v = speechSynthesis.getVoices();
+    koVoice = v.find(x => /^ko/i.test(x.lang) && x.localService) || v.find(x => /^ko/i.test(x.lang)) || null;
+  } catch (e) {}
+}
+if ("speechSynthesis" in window) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
+function speak(text) {
+  if (!("speechSynthesis" in window)) return;
+  try {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = "ko-KR"; if (koVoice) u.voice = koVoice;
+    u.volume = 1; u.rate = 0.9;
+    speechSynthesis.speak(u);
+  } catch (e) {}
+}
+const sayStudent = s => speak(prefs.sayNo ? `${s.no}번, ${s.name}` : s.name);
+
+async function keepAwake() {
+  try { if (R && navigator.wakeLock) R.lock = await navigator.wakeLock.request("screen"); } catch (e) {}
+}
+document.addEventListener("visibilitychange", () => { if (R && R.started && document.visibilityState === "visible") keepAwake(); });
+
+function openRoll() {
+  const list = activeAt(getClass(S.classId), S.draft.dt);
+  if (!list.length) return;
+  const el = document.createElement("div");
+  el.className = "roll"; el.setAttribute("role", "dialog"); el.setAttribute("aria-label", "음성 출석");
+  document.body.appendChild(el);
+  R = { list, i: 0, el, lock: null, started: false };
+  history.pushState({ v: "roll" }, "");
+  const noVoice = !("speechSynthesis" in window);
+  el.innerHTML = `<div class="roll-top"><button class="btn" data-r="close">닫기</button><span class="prog">${list.length}명</span></div>
+    <div class="roll-start">
+      <h2>번호순으로 이름을 불러 드릴게요</h2>
+      <div class="vol">시작하기 전에 휴대폰 <b>음량을 최대로</b> 올려 주세요. 블루투스 스피커에 연결하면 뒷자리까지 더 잘 들려요.</div>
+      ${noVoice ? `<p>이 브라우저는 음성 읽기를 지원하지 않아요. 화면의 이름을 보며 진행할 수 있어요.</p>` : ""}
+      <label class="roll-opt"><input type="checkbox" id="r-no" ${prefs.sayNo ? "checked" : ""}> 번호도 함께 읽기</label>
+      <button class="btn primary" data-r="start">시작</button>
+    </div>`;
+}
+function renderRoll() {
+  const s = R.list[R.i], ab = S.draft.absent.has(s.id), last = R.i === R.list.length - 1;
+  R.el.innerHTML = `<div class="roll-top"><button class="btn" data-r="close">그만하기</button><span class="prog">${R.i + 1} / ${R.list.length}</span></div>
+    <div class="roll-who"><span class="no">${s.no}번</span><span class="nm">${esc(s.name)}</span></div>
+    <button class="roll-toggle ${ab ? "absent" : ""}" data-r="toggle" aria-pressed="${ab}">${ab ? "결석" : "출석"}<small>${ab ? "누르면 출석으로 바뀌어요" : "누르면 결석으로 바뀌어요"}</small></button>
+    <div class="roll-nav">
+      <button class="btn" data-r="prev" ${R.i === 0 ? "disabled" : ""}>이전<small>${R.i > 0 ? esc(R.list[R.i - 1].name) : "&nbsp;"}</small></button>
+      <button class="btn" data-r="again">다시 부르기<small>${esc(s.name)}</small></button>
+      <button class="btn ${last ? "roll-done" : "primary"}" data-r="next">${last ? "완료" : "다음"}<small>${last ? "출석 저장" : esc(R.list[R.i + 1].name)}</small></button>
+    </div>`;
+}
+document.addEventListener("click", e => {
+  if (!R) return;
+  const b = e.target.closest("[data-r]");
+  if (!b || !R.el.contains(b) || b.disabled) return;
+  const s = R.list[R.i], d = S.draft;
+  switch (b.dataset.r) {
+    case "start":
+      prefs.sayNo = R.el.querySelector("#r-no").checked; savePrefs();
+      R.started = true; keepAwake(); renderRoll(); sayStudent(R.list[0]); break;
+    case "toggle":
+      if (d.absent.has(s.id)) { d.absent.delete(s.id); buzz(20); } else { d.absent.add(s.id); buzz([70, 50, 70]); }
+      S.dirty = true; renderRoll(); break;
+    case "again": sayStudent(s); break;
+    case "prev": R.i--; renderRoll(); sayStudent(R.list[R.i]); break;
+    case "next":
+      if (R.i < R.list.length - 1) { R.i++; renderRoll(); sayStudent(R.list[R.i]); }
+      else { const a = [...d.absent].length; speak(a ? `출석 확인을 마쳤습니다. 결석 ${a}명` : "출석 확인을 마쳤습니다. 모두 출석"); saveSession(); history.back(); }
+      break;
+    case "close": try { speechSynthesis.cancel(); } catch (e) {} history.back(); break;
+  }
+});
+function closeRoll() {
+  try { R.lock && R.lock.release(); } catch (e) {}
+  R.el.remove(); R = null; renderClass();
+}
+
+/* ---------- 반: 지난 기록 ---------- */
+function renderRecords() {
+  const cls = getClass(S.classId);
+  const ses = classSessions(cls.id).reverse();
+  const nameOf = id => (cls.students.find(s => s.id === id) || {}).name || "(삭제된 학생)";
+  app.innerHTML = `
+    <header class="bar"><div class="wrap">
+      <button class="icon-btn" data-act="to-class" aria-label="출석 체크로">${ICON.back}</button>
+      <h1>${esc(cls.name)} 기록</h1>
+    </div></header>
+    <main class="wrap">
+      <div class="records">${ses.length ? ses.map(s => `
+        <div class="rec">
+          <span class="when">${prettyDT(s.dt)}</span>
+          <span class="acts">
+            <button class="btn" data-edit="${s.id}">고치기</button>
+            <button class="btn danger" data-del="${s.id}" aria-label="기록 지우기">지우기</button>
+          </span>
+          <span class="abs">${s.absent.length ? `결석 <b>${s.absent.length}명</b> · ${s.absent.map(id => esc(nameOf(id))).join(", ")}` : "전원 출석"}</span>
+          ${s.memo ? `<span class="memo">${esc(s.memo)}</span>` : ""}
+        </div>`).join("") : `<p class="help">아직 저장한 출석이 없어요.</p>`}
+      </div>
+      <button class="btn danger" data-act="del-class">이 반 지우기</button>
+    </main>
+    <div class="dock"><div class="wrap">
+      <button class="btn" data-act="new-session">새 출석 체크</button>
+      <button class="btn primary" data-act="export-one">${ICON.share}이 반 내보내기</button>
+    </div></div>`;
+}
+
+/* ---------- 엑셀 명단 읽기 ---------- */
+const norm = s => String(s ?? "").replace(/\s+/g, "").trim();
+const NAME_H = /^(이름|성명|학생명|학생이름|학생성명)$/;
+const NO_H = /^(번호|번|출석번호|no\.?)$/i;
+const CLS_H = /^(반|학급|분반|학반|반명|수업반)$/;
+const ID_H = /^학번$/;
+function parseRows(rows) {
+  let h = -1, nameC = -1, noC = -1, clsC = -1, idC = -1;
+  for (let i = 0; i < Math.min(rows.length, 15); i++) {
+    const r = (rows[i] || []).map(norm);
+    const n = r.findIndex(c => NAME_H.test(c));
+    if (n >= 0) {
+      h = i; nameC = n;
+      noC = r.findIndex(c => NO_H.test(c));
+      clsC = r.findIndex(c => CLS_H.test(c));
+      idC = r.findIndex(c => ID_H.test(c));
+      break;
+    }
+  }
+  const groups = new Map();
+  const add = (k, s) => { if (!groups.has(k)) groups.set(k, []); groups.get(k).push(s); };
+  if (h >= 0) {
+    for (let i = h + 1; i < rows.length; i++) {
+      const r = rows[i] || [];
+      const name = String(r[nameC] ?? "").trim();
+      if (!name || NAME_H.test(norm(name))) continue;
+      let no = noC >= 0 ? parseInt(String(r[noC]).replace(/\D/g, ""), 10) : NaN;
+      if (isNaN(no) && idC >= 0) { const dg = String(r[idC]).replace(/\D/g, ""); if (dg.length >= 3) no = parseInt(dg.slice(-2), 10); }
+      add(clsC >= 0 ? String(r[clsC] ?? "").trim() : "", { no: isNaN(no) ? null : no, name });
+    }
+  } else {
+    // 제목 줄이 없을 때: "숫자 + 한글 이름" 줄을 찾음
+    for (const r of rows) {
+      const cells = (r || []).map(c => String(c ?? "").trim());
+      const ni = cells.findIndex(c => /^[가-힣]{2,5}$/.test(c));
+      if (ni < 1) continue;
+      let no = null;
+      for (let j = ni - 1; j >= 0; j--) {
+        if (/^\d{1,5}$/.test(cells[j])) { const dg = cells[j]; no = parseInt(dg.length >= 3 ? dg.slice(-2) : dg, 10); break; }
+      }
+      if (no !== null) add("", { no, name: cells[ni] });
+    }
+  }
+  for (const list of groups.values()) {
+    let k = 0;
+    list.forEach(s => { if (s.no == null) s.no = ++k; else k = Math.max(k, s.no); });
+  }
+  return groups;
+}
+function parseWorkbook(wb, fileName) {
+  const base = fileName.replace(/\.[^.]+$/, "");
+  const multi = wb.SheetNames.length > 1;
+  const out = new Map();
+  for (const sn of wb.SheetNames) {
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, defval: "", raw: false });
+    const groups = parseRows(rows);
+    const plain = /^(sheet|시트)\s*\d*$/i.test(sn.trim());
+    const def = (multi || !plain) ? sn.trim() : base;
+    for (const [k, list] of groups) {
+      if (!list.length) continue;
+      const name = k ? (/^\d+$/.test(k) ? k + "반" : k) : def;
+      if (!out.has(name)) out.set(name, []);
+      out.get(name).push(...list);
+    }
+  }
+  return [...out].map(([name, students]) => ({ name, students: students.sort(byNo) }));
+}
+
+async function handleFile(file) {
+  if (!window.XLSX) { toast("엑셀 도구를 불러오지 못했어요. 인터넷 연결을 확인해 주세요."); return; }
+  let groups;
+  try {
+    const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
+    groups = parseWorkbook(wb, file.name);
+  } catch (e) {
+    ask({ title: "파일을 열지 못했어요", body: "엑셀(.xlsx, .xls) 또는 CSV 파일인지 확인해 주세요.", actions: [{ label: "확인", cls: "primary" }] });
+    return;
+  }
+  if (!groups.length) {
+    ask({ title: "학생 이름을 찾지 못했어요", body: "첫 줄에 <b>번호</b>, <b>이름</b>(또는 성명) 제목을 넣고 다시 올려 주세요.", actions: [{ label: "확인", cls: "primary" }] });
+    return;
+  }
+  showImportPreview(groups);
+}
+
+function showImportPreview(groups) {
+  sheet(`<h2>명단 ${groups.length}개 반을 찾았어요</h2>
+    <p>반 이름을 확인하고 고칠 수 있어요.</p>
+    ${groups.map((g, i) => `<div class="imp">
+      <div class="row">
+        <input type="checkbox" id="imp-on-${i}" checked aria-label="${esc(g.name)} 포함">
+        <input type="text" id="imp-name-${i}" value="${esc(g.name)}" aria-label="반 이름">
+      </div>
+      <div class="names">${g.students.length}명 · ${g.students.slice(0, 4).map(s => `${s.no} ${esc(s.name)}`).join(", ")}${g.students.length > 4 ? " …" : ""}</div>
+      <div class="warn" id="imp-warn-${i}" hidden>같은 이름의 반이 있어요. 명단을 새로 맞추고, 지난 출결 기록은 그대로 둡니다.</div>
+    </div>`).join("")}
+    <div class="acts">
+      <button class="btn primary block" id="imp-go">반 만들기</button>
+      <button class="btn block" id="imp-cancel">취소</button>
+    </div>`, (el, close) => {
+    const check = i => { el.querySelector(`#imp-warn-${i}`).hidden = !db.classes.some(c => c.name === el.querySelector(`#imp-name-${i}`).value.trim()); };
+    groups.forEach((g, i) => { check(i); el.querySelector(`#imp-name-${i}`).oninput = () => check(i); });
+    el.querySelector("#imp-cancel").onclick = close;
+    el.querySelector("#imp-go").onclick = () => {
+      let made = 0;
+      groups.forEach((g, i) => {
+        if (!el.querySelector(`#imp-on-${i}`).checked) return;
+        const name = el.querySelector(`#imp-name-${i}`).value.trim() || g.name;
+        applyImport(name, g.students); made++;
+      });
+      if (!made) return close();
+      persist(); close(); render();
+      toast(`${made}개 반 명단을 저장했어요`);
+    };
+  });
+}
+
+function applyImport(name, list) {
+  const cls = db.classes.find(c => c.name === name);
+  if (!cls) {
+    db.classes.push({ id: uid(), name, createdAt: nowDT(),
+      students: list.map(s => ({ id: uid(), no: s.no, name: s.name, addedAt: null, leftAt: null })) });
+    return;
+  }
+  // 같은 반이면 이름으로 맞춰 기존 기록을 유지
+  const now = nowDT(), used = new Set();
+  const next = list.map(s => {
+    const ex = cls.students.find(x => x.name === s.name && !used.has(x.id));
+    if (ex) { used.add(ex.id); ex.no = s.no; ex.leftAt = null; return ex; }
+    return { id: uid(), no: s.no, name: s.name, addedAt: now, leftAt: null };
+  });
+  cls.students.forEach(s => { if (!used.has(s.id)) { if (!s.leftAt) s.leftAt = now; next.push(s); } });
+  cls.students = next;
+}
+
+/* ---------- 엑셀 내보내기 ---------- */
+function sheetName(name, used) {
+  let base = name.replace(/[\[\]:*?\/\\]/g, " ").trim().slice(0, 28) || "반";
+  let n = base, k = 2;
+  while (used.has(n)) n = `${base} ${k++}`;
+  used.add(n); return n;
+}
+function buildWorkbook(classes) {
+  const wb = XLSX.utils.book_new();
+  const used = new Set(["진도 기록"]);
+  const stamp = nowDT();
+  const prog = [["반", "수업 일시", "재적", "출석", "결석", "결석 학생", "진도 메모"]];
+  for (const cls of classes) {
+    const ses = classSessions(cls.id);
+    const studs = [...cls.students].sort(byNo);
+    const aoa = [
+      [`${cls.name} 출석부`],
+      [`내보낸 시각 ${stamp}  ·  출 = 출석, 결 = 결석, - = 그때 명단에 없음`],
+      [],
+      ["번호", "이름", ...ses.map(s => s.dt), "출석 수", "결석 수"]
+    ];
+    for (const st of studs) {
+      let p = 0, a = 0;
+      const cells = ses.map(s => {
+        if ((st.addedAt && st.addedAt > s.dt) || (st.leftAt && st.leftAt <= s.dt)) return "-";
+        if (s.absent.includes(st.id)) { a++; return "결"; }
+        p++; return "출";
+      });
+      aoa.push([st.no, st.name + (st.leftAt ? " (명단 제외)" : ""), ...cells, p, a]);
+    }
+    aoa.push(["", "결석 인원", ...ses.map(s => s.absent.length), "", ""]);
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws["!cols"] = [{ wch: 6 }, { wch: 14 }, ...ses.map(() => ({ wch: 17 })), { wch: 8 }, { wch: 8 }];
+    XLSX.utils.book_append_sheet(wb, ws, sheetName(cls.name, used));
+    for (const s of ses) {
+      const n = activeAt(cls, s.dt).length;
+      const names = s.absent.map(id => (cls.students.find(x => x.id === id) || {}).name).filter(Boolean).join(", ");
+      prog.push([cls.name, s.dt, n, n - s.absent.length, s.absent.length, names, s.memo || ""]);
+    }
+  }
+  const pws = XLSX.utils.aoa_to_sheet(prog);
+  pws["!cols"] = [{ wch: 14 }, { wch: 17 }, { wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 24 }, { wch: 50 }];
+  XLSX.utils.book_append_sheet(wb, pws, "진도 기록");
+  return wb;
+}
+function exportFile(classes) {
+  const d = nowDT().slice(0, 10);
+  const label = classes.length === 1 ? classes[0].name : "전체";
+  const fname = `출석부_${label}_${d}.xlsx`.replace(/[\\/:*?"<>|]/g, "_");
+  const data = XLSX.write(buildWorkbook(classes), { bookType: "xlsx", type: "array" });
+  const type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  return { fname, blob: new Blob([data], { type }), file: new File([data], fname, { type }) };
+}
+async function shareOut(classes) {
+  if (!window.XLSX) { toast("엑셀 도구를 불러오지 못했어요. 인터넷 연결을 확인해 주세요."); return; }
+  const { file } = exportFile(classes);
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: file.name }); return; }
+    catch (e) { if (e.name === "AbortError") return; }
+  }
+  toast("이 기기는 공유 메뉴를 쓸 수 없어서 파일로 저장할게요");
+  saveOut(classes);
+}
+function saveOut(classes) {
+  if (!window.XLSX) { toast("엑셀 도구를 불러오지 못했어요. 인터넷 연결을 확인해 주세요."); return; }
+  const { fname, blob } = exportFile(classes);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = fname; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  toast(`${fname} 파일을 저장했어요`);
+}
+function exportSheet(classes, title) {
+  const n = classes.reduce((t, c) => t + classSessions(c.id).length, 0);
+  sheet(`<h2>${esc(title)}</h2>
+    <p>${classes.length}개 반, 수업 기록 ${n}회가 엑셀 한 파일에 담겨요. 반마다 시트가 하나씩 생기고, 진도 메모는 '진도 기록' 시트에 모여요.</p>
+    <div class="acts">
+      <button class="btn primary block" id="ex-share">${ICON.share}공유하기 (카카오톡·드라이브·메일)</button>
+      <button class="btn block" id="ex-save">이 기기에 파일로 저장</button>
+      <button class="btn block" id="ex-cancel">취소</button>
+    </div>`, (el, close) => {
+    el.querySelector("#ex-share").onclick = () => { close(); shareOut(classes); };
+    el.querySelector("#ex-save").onclick = () => { close(); saveOut(classes); };
+    el.querySelector("#ex-cancel").onclick = close;
+  });
+}
+
+/* ---------- 예시 반 ---------- */
+function loadDemo() {
+  const names = ["강민준","김서연","김하준","박지우","박도윤","이서윤","이시우","정하은","최지호","한수아","오예준","윤채원","임건우","장유나","조은우","황지민"];
+  const cls = { id: uid(), name: "예시 2학년 3반", createdAt: nowDT(),
+    students: names.map((n, i) => ({ id: uid(), no: i + 1, name: n, addedAt: null, leftAt: null })) };
+  db.classes.push(cls);
+  const day = k => { const d = new Date(); d.setDate(d.getDate() - k); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+  db.sessions.push(
+    { id: uid(), classId: cls.id, dt: `${day(7)} 10:10`, absent: [cls.students[3].id], memo: "1단원 매체의 개념 정리, 모둠별 사례 찾기" },
+    { id: uid(), classId: cls.id, dt: `${day(2)} 13:20`, absent: [cls.students[5].id, cls.students[11].id], memo: "2단원 매체 언어의 특성 — 활동지 3번까지" }
+  );
+  persist(); render();
+  toast("예시 반을 만들었어요. 다 보셨으면 기록 화면에서 지울 수 있어요");
+}
+
+/* ---------- 이벤트 ---------- */
+app.addEventListener("click", e => {
+  const t = e.target.closest("button");
+  if (!t) return;
+  if (t.dataset.sid) return toggle(t.dataset.sid);
+  if (t.dataset.open) return openClass(t.dataset.open);
+  if (t.dataset.edit) { S.view = "class"; const s = db.sessions.find(x => x.id === t.dataset.edit);
+    S.draft = { id: s.id, dt: s.dt, absent: new Set(s.absent), memo: s.memo || "" }; S.dirty = false; return render(); }
+  if (t.dataset.del) {
+    const s = db.sessions.find(x => x.id === t.dataset.del);
+    return ask({ title: `${prettyDT(s.dt)} 기록을 지울까요?`, body: "지운 기록은 되돌릴 수 없어요.",
+      actions: [{ label: "지우기", cls: "solid-danger", fn: () => { db.sessions = db.sessions.filter(x => x.id !== s.id); persist(); render(); toast("기록을 지웠어요"); } }, { label: "취소" }] });
+  }
+  const cls = getClass(S.classId);
+  switch (t.dataset.act) {
+    case "import": document.getElementById("file").click(); break;
+    case "demo": loadDemo(); break;
+    case "export": exportSheet(db.classes, "출석부 내보내기"); break;
+    case "export-one": exportSheet([cls], `${cls.name} 내보내기`); break;
+    case "save": saveSession(); break;
+    case "roll": openRoll(); break;
+    case "back": history.back(); break;
+    case "records":
+      if (S.dirty || !S.draft.id) {
+        ask({ title: "출석을 먼저 저장할까요?", body: "기록 화면으로 가면 지금 체크한 내용이 사라져요.",
+          actions: [{ label: "저장하고 기록 보기", cls: "primary", fn: () => { if (saveSession()) { S.view = "records"; render(); } } },
+                    { label: "저장하지 않고 기록 보기", cls: "danger", fn: () => { S.view = "records"; render(); } },
+                    { label: "계속 체크하기" }] });
+      } else { S.view = "records"; render(); }
+      break;
+    case "to-class": case "new-session":
+      S.draft = { id: null, dt: nowDT(), absent: new Set(), memo: "" }; S.dirty = false; S.view = "class"; render(); break;
+    case "del-class":
+      ask({ title: `${cls.name}을(를) 지울까요?`, body: "학생 명단과 출결 기록이 모두 지워지고 되돌릴 수 없어요. 필요하면 먼저 내보내기로 엑셀을 받아 두세요.",
+        actions: [{ label: "반 지우기", cls: "solid-danger", fn: () => {
+          db.classes = db.classes.filter(c => c.id !== cls.id);
+          db.sessions = db.sessions.filter(s => s.classId !== cls.id);
+          persist(); S.view = "home"; S.classId = null; history.back(); render(); toast("반을 지웠어요"); } }, { label: "취소" }] });
+      break;
+  }
+});
+
+document.getElementById("file").addEventListener("change", e => {
+  const f = e.target.files[0]; e.target.value = "";
+  if (f) handleFile(f);
+});
+
+// 휴대폰 뒤로 가기
+window.addEventListener("popstate", () => {
+  if (R) return closeRoll();
+  if (S.view === "home") return;
+  if (S.view === "records") { S.view = "home"; S.draft = null; return render(); }
+  leaveClass();
+});
+window.addEventListener("beforeunload", e => {
+  if (S.view === "class" && S.dirty) { e.preventDefault(); e.returnValue = ""; }
+});
+
+// 테스트용으로 바깥에 노출
+window.__att = { parseRows, parseWorkbook, buildWorkbook, get db() { return db; } };
+
+render();
+
+if ("serviceWorker" in navigator && location.protocol === "https:") {
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+}
+})();
+</script>
+</body>
+</html>
