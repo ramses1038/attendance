@@ -88,7 +88,7 @@ button { cursor: pointer; }
 .bar .wrap { display: flex; align-items: center; gap: 8px; min-height: 58px; padding-block: 6px; }
 .bar h1 { font: clamp(20px, 6vw, 26px)/1.15 var(--display); margin: 0; flex: 1; min-width: 0; overflow-wrap: anywhere; text-wrap: balance; }
 /* 머리줄 오른쪽 버튼: 아이콘 위, 글자 아래로 좁게 */
-.bar .icon-btn.lbl { flex-direction: column; gap: 1px; height: 52px; min-width: 52px; padding: 0 4px; font-size: 12px; font-weight: 600; flex: none; }
+.bar .icon-btn.lbl { flex-direction: column; gap: 1px; height: 52px; min-width: 52px; padding: 0 4px; font-size: 12px; font-weight: 600; flex: none; white-space: nowrap; }
 .bar .icon-btn.lbl svg { width: 22px; height: 22px; }
 .bar .sub { color: var(--muted); font-size: 13px; white-space: nowrap; }
 .icon-btn {
@@ -477,7 +477,7 @@ function renderHome() {
     <div class="sync-line" id="sync-line"></div>`;
   }
   app.innerHTML = `
-    <header class="bar"><div class="wrap"><h1>수업 출석부</h1><span class="sub">${today}</span><button class="icon-btn" data-act="settings" aria-label="구글 드라이브 백업">${ICON.drive}</button></div></header>
+    <header class="bar"><div class="wrap"><h1>수업 출석부</h1><span class="sub">${today}</span><button class="icon-btn lbl" data-act="settings" aria-label="구글 드라이브 백업">${ICON.drive}구글 드라이브</button></div></header>
     <main class="wrap">
       <button class="term-chip" data-act="term">${termLabel(S.term)}${ICON.down}</button>
       ${body}
