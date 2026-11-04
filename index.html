@@ -978,9 +978,9 @@ function exportSheet(classes, title) {
 /* ---------- 구글 드라이브 ---------- */
 // 구글 클라우드 콘솔에서 받은 값 (비어 있으면 드라이브 기능이 숨겨짐)
 const DRIVE = {
-  clientId: "",   // OAuth 클라이언트 ID (…apps.googleusercontent.com)
+  clientId: "134195899365-53od110i6cs2sp5i0enhgm98pp9htmei.apps.googleusercontent.com",   // OAuth 클라이언트 ID (…apps.googleusercontent.com)
   apiKey: "",     // API 키 (Picker용)
-  appId: ""       // 프로젝트 번호 (숫자)
+  appId: "134195899365"       // 프로젝트 번호 (숫자)
 };
 const SCOPE = "https://www.googleapis.com/auth/drive.file";
 const FOLDER_NAME = "수업 출석부";
@@ -1190,7 +1190,7 @@ async function pickFromDrive() {
 }
 
 function openImportChoice() {
-  if (!driveConfigured()) return document.getElementById("file").click();
+  if (!driveConfigured() || !DRIVE.apiKey) return document.getElementById("file").click();
   sheet(`<h2>명단 올리기</h2>
     <p>첫 줄에 번호, 이름 제목이 있는 엑셀이나 구글 시트를 골라 주세요.</p>
     <div class="acts">
