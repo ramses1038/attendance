@@ -608,7 +608,7 @@ function renderClass() {
       <button class="icon-btn" data-act="back" aria-label="반 목록으로">${ICON.back}</button>
       <h1>${esc(cls.name)}</h1>
       <button class="icon-btn" data-act="roster">${ICON.people}명단수정</button>
-      <button class="icon-btn" data-act="records">${ICON.list}기록</button>
+      <button class="icon-btn" data-act="records">${ICON.list}과거조회</button>
     </div></header>
     <main class="wrap">
       <section class="prev ${pm ? "" : "none"}">
@@ -1054,7 +1054,7 @@ function renderRecords() {
   app.innerHTML = `
     <header class="bar"><div class="wrap">
       <button class="icon-btn" data-act="to-class" aria-label="출석 체크로">${ICON.back}</button>
-      <h1>${esc(cls.name)} 기록</h1>
+      <h1>${esc(cls.name)} 과거조회</h1>
       <button class="icon-btn" data-act="roster">${ICON.people}명단수정</button>
     </div></header>
     <main class="wrap">
@@ -1966,9 +1966,9 @@ app.addEventListener("click", e => {
     case "back": history.back(); break;
     case "records":
       if (S.dirty || !S.draft.id) {
-        ask({ title: "출석을 먼저 저장할까요?", body: "기록 화면으로 가면 지금 체크한 내용이 사라져요.",
-          actions: [{ label: "저장하고 기록 보기", cls: "primary", fn: () => { if (saveSession()) { S.view = "records"; render(); } } },
-                    { label: "저장하지 않고 기록 보기", cls: "danger", fn: () => { S.view = "records"; render(); } },
+        ask({ title: "출석을 먼저 저장할까요?", body: "과거조회 화면으로 가면 지금 체크한 내용이 사라져요.",
+          actions: [{ label: "저장하고 과거조회", cls: "primary", fn: () => { if (saveSession()) { S.view = "records"; render(); } } },
+                    { label: "저장하지 않고 과거조회", cls: "danger", fn: () => { S.view = "records"; render(); } },
                     { label: "계속 체크하기" }] });
       } else { S.view = "records"; render(); }
       break;
