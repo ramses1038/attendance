@@ -1666,10 +1666,10 @@ async function pickFromDrive() {
 function openImportChoice() {
   const drive = driveConfigured() && DRIVE.apiKey;
   sheet(`<h2>명단 올리기</h2>
-    <p>아래 양식의 표를 구글 드라이브에서 고르거나, 명렬표를 화면 캡처한 <b>스크린샷</b>을 갤러리에서 골라 주세요.</p>
+    <p>아래 양식의 명렬표 엑셀 파일(또는 구글 스프레드시트)을 구글 드라이브에서 불러오거나, 명렬표를 화면 캡처한 <b>스크린샷</b>을 갤러리에서 골라 주세요.</p>
     ${FORMAT_HTML}
     <div class="acts">
-      ${drive ? `<button class="btn primary block" id="im-drive">${ICON.drive}구글 드라이브에서 고르기</button>` : ""}
+      ${drive ? `<button class="btn primary block" id="im-drive">${ICON.drive}구글 드라이브에서 불러오기</button>` : ""}
       <button class="btn ${drive ? "" : "primary"} block" id="im-photo">${ICON.image}갤러리에서 명렬표 스크린샷 고르기</button>
       <button class="btn block" id="im-type">표에 직접 입력하기</button>
       <button class="btn block" id="im-cancel">취소</button>
