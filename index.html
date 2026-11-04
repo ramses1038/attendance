@@ -86,7 +86,10 @@ button { cursor: pointer; }
   border-bottom: 1px solid var(--line);
 }
 .bar .wrap { display: flex; align-items: center; gap: 8px; min-height: 58px; padding-block: 6px; }
-.bar h1 { font: 26px/1.1 var(--display); margin: 0; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar h1 { font: clamp(20px, 6vw, 26px)/1.15 var(--display); margin: 0; flex: 1; min-width: 0; overflow-wrap: anywhere; text-wrap: balance; }
+/* 머리줄 오른쪽 버튼: 아이콘 위, 글자 아래로 좁게 */
+.bar .icon-btn.lbl { flex-direction: column; gap: 1px; height: 52px; min-width: 52px; padding: 0 4px; font-size: 12px; font-weight: 600; flex: none; }
+.bar .icon-btn.lbl svg { width: 22px; height: 22px; }
 .bar .sub { color: var(--muted); font-size: 13px; white-space: nowrap; }
 .icon-btn {
   border: 0; background: transparent; border-radius: 10px;
@@ -607,8 +610,8 @@ function renderClass() {
     <header class="bar"><div class="wrap">
       <button class="icon-btn" data-act="back" aria-label="반 목록으로">${ICON.back}</button>
       <h1>${esc(cls.name)}</h1>
-      <button class="icon-btn" data-act="roster">${ICON.people}명단수정</button>
-      <button class="icon-btn" data-act="records">${ICON.list}과거조회</button>
+      <button class="icon-btn lbl" data-act="roster">${ICON.people}명단수정</button>
+      <button class="icon-btn lbl" data-act="records">${ICON.list}과거조회</button>
     </div></header>
     <main class="wrap">
       <section class="prev ${pm ? "" : "none"}">
@@ -1055,7 +1058,7 @@ function renderRecords() {
     <header class="bar"><div class="wrap">
       <button class="icon-btn" data-act="to-class" aria-label="출석 체크로">${ICON.back}</button>
       <h1>${esc(cls.name)} 과거조회</h1>
-      <button class="icon-btn" data-act="roster">${ICON.people}명단수정</button>
+      <button class="icon-btn lbl" data-act="roster">${ICON.people}명단수정</button>
     </div></header>
     <main class="wrap">
       <p class="help">날짜를 누르면 그날 출석부를 볼 수 있어요. 수업 ${ses.length}회</p>
