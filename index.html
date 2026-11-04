@@ -876,6 +876,12 @@ function sheetName(name, used) {
   while (used.has(n)) n = `${base} ${k++}`;
   used.add(n); return n;
 }
+// 엑셀 날짜 칸: 11/04(수) 13:20
+function colDT(dt) {
+  const [d, t] = dt.split(" ");
+  const [y, m, dd] = d.split("-").map(Number);
+  return `${pad(m)}/${pad(dd)}(${WD[new Date(y, m - 1, dd).getDay()]}) ${t}`;
+}
 function buildWorkbook(classes) {
   const wb = XLSX.utils.book_new();
   const used = new Set(["진도 기록"]);
@@ -888,7 +894,7 @@ function buildWorkbook(classes) {
       [`${cls.name} 출석부`],
       [`내보낸 시각 ${stamp}  ·  O = 출석, X = 결석, - = 그때 명단에 없음`],
       [],
-      ["번호", "이름", ...ses.map(s => s.dt), "출석 수", "결석 수"]
+      ["번호", "이름", ...ses.map(s => colDT(s.dt)), "출석 수", "결석 수"]
     ];
     for (const st of studs) {
       let p = 0, a = 0;
@@ -901,12 +907,12 @@ function buildWorkbook(classes) {
     }
     aoa.push(["", "결석 인원", ...ses.map(s => s.absent.length), "", ""]);
     const ws = XLSX.utils.aoa_to_sheet(aoa);
-    ws["!cols"] = [{ wch: 6 }, { wch: 14 }, ...ses.map(() => ({ wch: 17 })), { wch: 8 }, { wch: 8 }];
+    ws["!cols"] = [{ wch: 6 }, { wch: 14 }, ...ses.map(() => ({ wch: 14 })), { wch: 8 }, { wch: 8 }];
     XLSX.utils.book_append_sheet(wb, ws, sheetName(cls.name, used));
     for (const s of ses) {
       const n = activeAt(cls, s.dt).length;
       const names = s.absent.map(id => (cls.students.find(x => x.id === id) || {}).name).filter(Boolean).join(", ");
-      prog.push([cls.name, s.dt, n, n - s.absent.length, s.absent.length, names, s.memo || ""]);
+      prog.push([cls.name, colDT(s.dt), n, n - s.absent.length, s.absent.length, names, s.memo || ""]);
     }
   }
   const pws = XLSX.utils.aoa_to_sheet(prog);
