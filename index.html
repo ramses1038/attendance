@@ -309,6 +309,7 @@ main.wrap { padding-block: 16px 140px; display: flex; flex-direction: column; ga
 .srow:last-child { border-bottom: 0; }
 .srow .no { color: var(--muted); font-variant-numeric: tabular-nums; }
 .srow .nm { font-weight: 600; font-size: 16px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.srow .nm small.home { font-size: 12px; font-weight: 500; color: var(--muted); margin-left: 4px; }
 .srow .chev { color: var(--muted); display: flex; }
 .srow.gone .nm { color: var(--muted); }
 .pill { font-size: 12px; font-weight: 600; border-radius: 999px; padding: 3px 9px; background: var(--off-bg); color: var(--off-ink); white-space: nowrap; }
@@ -412,7 +413,12 @@ function prettyDT(dt, withTime = true) {
   return `${m}월 ${dd}일 (${w})` + (withTime && tl ? ` ${tl}` : "");
 }
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const byNo = (a, b) => (a.no ?? 9999) - (b.no ?? 9999) || (a.ord ?? 0) - (b.ord ?? 0) || a.name.localeCompare(b.name, "ko");
+// 정렬: (여러 반이 섞인 수업이면) 소속 학년·반 → 번호 → 명단 순서
+const byNo = (a, b) => (a.hg ?? 0) - (b.hg ?? 0) || String(a.hc || "").localeCompare(String(b.hc || ""), "ko", { numeric: true })
+  || (a.no ?? 9999) - (b.no ?? 9999) || (a.ord ?? 0) - (b.ord ?? 0) || a.name.localeCompare(b.name, "ko");
+// 소속 반 표시: 3-2, 학년 없이 반만 있으면 2반
+const homeOf = s => s.hg != null && s.hc ? `${s.hg}-${s.hc}` : s.hc ? clsLabel(s.hc) : s.hg != null ? `${s.hg}학년` : "";
+const isMixed = cls => new Set(cls.students.filter(s => !s.leftAt).map(homeOf)).size > 1;
 const getClass = id => db.classes.find(c => c.id === id);
 const classSessions = id => db.sessions.filter(s => s.classId === id).sort((a, b) => a.dt.localeCompare(b.dt));
 // 그 수업 시각에 명단에 있던 학생
@@ -503,7 +509,7 @@ function renderHome() {
   if (!classes.length) {
     body = `<div class="empty">
       <h2>${termLabel(S.term)}에 아직 반이 없어요</h2>
-      <p><b>학년, 반, 번호, 이름</b> 순서의 명렬표를 구글 드라이브에서 불러오거나 직접 입력하면 반이 만들어져요. 학년과 반이 있으면 여러 반을 한 번에 만들어요.</p>
+      <p><b>학년, 반, 번호, 이름</b> 순서의 명렬표를 구글 드라이브에서 불러오거나 직접 입력하면 반이 만들어져요. 파일 안의 시트마다 반이 하나씩 만들어지고, 시트 이름이 반 이름이 돼요.</p>
       <div class="btns">
         <button class="btn primary" data-act="import">${ICON.upload}명단 올리기</button>
         ${db.classes.length ? "" : `<button class="btn" data-act="demo">예시 반으로 둘러보기</button>`}
@@ -701,6 +707,7 @@ const tallyHTML = (all, n, a) => {
 // 재적·출석·결석·제외 버튼으로 학생 칸을 골라 보기 (같은 버튼을 다시 누르면 전체)
 function drawGrid() {
   const cls = getClass(S.classId), d = S.draft, f = S.filter || "all";
+  S.mixed = isMixed(cls);
   const all = activeAt(cls, d.dt), call = callAt(cls, d.dt);
   const offs = all.filter(s => offAt(s, d.dt));
   const absentN = call.filter(s => d.absent.has(s.id)).length;
@@ -708,7 +715,7 @@ function drawGrid() {
   let list, tiles;
   if (f === "off") {
     list = offs;
-    tiles = list.map(s => `<div class="tile off-tile" data-oid="${s.id}"><span class="no">${s.no ?? ""}</span><span class="mark offm">${esc(offAt(s, d.dt))}</span><span class="name">${esc(s.name)}</span></div>`).join("");
+    tiles = list.map(s => `<div class="tile off-tile" data-oid="${s.id}"><span class="no">${noLabel(s)}</span><span class="mark offm">${esc(offAt(s, d.dt))}</span><span class="name">${esc(s.name)}</span></div>`).join("");
   } else {
     list = f === "present" ? call.filter(s => !d.absent.has(s.id)) : f === "absent" ? call.filter(s => d.absent.has(s.id)) : call;
     tiles = list.map(s => tileHTML(s, d.absent.has(s.id))).join("");
@@ -719,8 +726,9 @@ function drawGrid() {
   document.getElementById("grid").innerHTML = list.length ? tiles
     : `<p class="help">${f === "all" ? "출석을 부를 학생이 없어요. 위쪽 <b>명단수정</b>에서 학생을 추가해 주세요." : `${label} 학생이 없어요.`}</p>`;
 }
+const noLabel = s => { const h = S.mixed ? homeOf(s) : ""; return h ? `${h}${s.no != null ? " · " + s.no : ""}` : (s.no ?? ""); };
 const tileHTML = (s, absent) => `<button class="tile ${absent ? "absent" : ""}" data-sid="${s.id}" aria-pressed="${absent}">
-  <span class="no">${s.no ?? ""}</span>${absent ? '<span class="mark">결석</span>' : ""}<span class="name">${esc(s.name)}</span></button>`;
+  <span class="no">${noLabel(s)}</span>${absent ? '<span class="mark">결석</span>' : ""}<span class="name">${esc(s.name)}</span></button>`;
 
 // 학생 칸 꾹 누르기 → 아래에서 상태 메뉴
 function bindHold(grid) {
@@ -906,10 +914,11 @@ function rowHTML(s) {
   const r = offNow(s);
   const pill = s.leftAt ? `<span class="pill gone">${esc(s.leftNote || "전출")}</span>` : r ? `<span class="pill">${esc(r)}</span>` : "";
   return `<button class="srow ${s.leftAt ? "gone" : ""}" data-stu="${s.id}">
-    <span class="no">${s.no ?? ""}</span><span class="nm">${esc(s.name)}</span>${pill}<span class="chev">${ICON.chev}</span></button>`;
+    <span class="no">${s.no ?? ""}</span><span class="nm">${esc(s.name)}${S.mixed && homeOf(s) ? ` <small class="home">${esc(homeOf(s))}</small>` : ""}</span>${pill}<span class="chev">${ICON.chev}</span></button>`;
 }
 function renderRoster() {
   const cls = getClass(S.classId);
+  S.mixed = isMixed(cls);
   const cur = cls.students.filter(s => !s.leftAt).sort(byNo);
   const gone = cls.students.filter(s => s.leftAt).sort(byNo);
   const offN = cur.filter(s => offNow(s)).length;
@@ -1095,6 +1104,7 @@ function openSession(id) {
 }
 function renderSession() {
   const cls = getClass(S.classId);
+  S.mixed = isMixed(cls);
   const list = classSessions(cls.id);
   const i = list.findIndex(x => x.id === S.sessionId);
   if (i < 0) { S.view = "records"; return render(); }
@@ -1105,8 +1115,8 @@ function renderSession() {
   const f = S.filter || "all", on = k => (f === k ? " sel" : "");
   const shown = f === "absent" ? call.filter(s => absent.has(s.id)) : f === "present" ? call.filter(s => !absent.has(s.id)) : f === "off" ? offs : call;
   const tile = s => offAt(s, ses.dt)
-    ? `<div class="tile off-tile"><span class="no">${s.no ?? ""}</span><span class="mark offm">${esc(offAt(s, ses.dt))}</span><span class="name">${esc(s.name)}</span></div>`
-    : `<div class="tile view ${absent.has(s.id) ? "absent" : ""}"><span class="no">${s.no ?? ""}</span>${absent.has(s.id) ? '<span class="mark">결석</span>' : ""}<span class="name">${esc(s.name)}</span></div>`;
+    ? `<div class="tile off-tile"><span class="no">${noLabel(s)}</span><span class="mark offm">${esc(offAt(s, ses.dt))}</span><span class="name">${esc(s.name)}</span></div>`
+    : `<div class="tile view ${absent.has(s.id) ? "absent" : ""}"><span class="no">${noLabel(s)}</span>${absent.has(s.id) ? '<span class="mark">결석</span>' : ""}<span class="name">${esc(s.name)}</span></div>`;
   const label = { present: "출석", absent: "결석", off: "출석 제외" }[f];
   app.innerHTML = `
     <header class="bar"><div class="wrap">
@@ -1145,8 +1155,13 @@ const NO_H = /^(번호|번|출석번호|no\.?)$/i;
 const CLS_H = /^(반|학급|분반|학반|반명|수업반|선택반|반이름)$/;
 const GRADE_H = /^(학년)$/;
 const ID_H = /^학번$/;
-const FORMAT_HTML = `<table class="fmt"><tr><th>학년</th><th>반</th><th>번호</th><th>이름</th></tr><tr><td>3</td><td>2</td><td>1</td><td>홍길동</td></tr><tr><td>3</td><td>2</td><td>2</td><td>이순신</td></tr><tr><td>3</td><td>A</td><td>1</td><td>안창호</td></tr></table>
-  <p class="help">첫 줄에 <b>학년, 반, 번호, 이름</b> 제목을 넣은 표가 가장 정확해요. 학년·반·번호는 없으면 빼도 되지만 <b>이름은 꼭 있어야</b> 해요. 반에는 숫자뿐 아니라 <b>A, B, 가, 나</b> 같은 선택반 이름도 쓸 수 있고, '3학년 2반', '3학년 A반'처럼 반이 자동으로 나뉘어요.</p>`;
+const FORMAT_HTML = `<table class="fmt"><tr><th>학년</th><th>반</th><th>번호</th><th>이름</th></tr><tr><td>3</td><td>1</td><td>5</td><td>홍길동</td></tr><tr><td>3</td><td>4</td><td>12</td><td>이순신</td></tr><tr><td>3</td><td>7</td><td>3</td><td>안창호</td></tr></table>
+  <p class="help">첫 줄에 <b>학년, 반, 번호, 이름</b> 제목을 넣은 표가 가장 정확해요. 학년·반·번호는 없으면 빼도 되지만 <b>이름은 꼭 있어야</b> 해요. </p>
+  <div class="note">
+    <b>시트 하나 = 반 하나</b>
+    <p>한 파일에 시트가 여러 개면 <b>시트마다 반이 하나씩</b> 만들어지고, <b>시트 이름이 반 이름</b>으로 자동 지정돼요. 예: '생명과학2 B반' 시트 → '생명과학2 B반' 출석부</p>
+    <p>고교학점제 수업처럼 여러 반 학생이 섞여 있어도 한 시트에 있으면 한 반으로 만들어지고, 학생마다 소속 반(예: 3-2)이 함께 표시돼요.</p>
+  </div>`;
 const digits = v => { const m = String(v ?? "").match(/\d+/); return m ? parseInt(m[0], 10) : null; };
 const cellText = v => String(v ?? "").trim();
 
@@ -1273,14 +1288,19 @@ function handleBuffer(buf, fileName) {
   showImportPreview(groupByDef(rows));
 }
 // 시트마다 기본 반 이름이 다를 수 있어서 시트별로 묶은 뒤 합침
+// 시트 하나 = 반 하나 (반 이름 = 시트 이름). 여러 반 학생이 섞여 있어도 나누지 않음
 function groupByDef(rows) {
   const out = new Map();
   rows.forEach((r, i) => {
-    const k = className(r, r.def || "새 반");
+    const k = r.def || "새 반";
     if (!out.has(k)) out.set(k, []);
-    out.get(k).push({ no: r.no, name: r.name.trim(), ord: i });
+    out.get(k).push({ no: r.no, name: r.name.trim(), ord: i, hg: r.grade ?? null, hc: r.cls ? String(r.cls).replace(/반$/, "") : "" });
   });
-  return [...out].map(([name, students]) => ({ name, students: students.sort(byNo) }));
+  return [...out].map(([name, students]) => {
+    // 직접 입력처럼 이름이 정해지지 않았고 모두 같은 반이면 그 반 이름을 추천
+    if (name === "새 반") { const ks = [...new Set(students.map(s => className({ grade: s.hg, cls: s.hc }, "")))]; if (ks.length === 1 && ks[0]) name = ks[0]; }
+    return { name, students: students.sort(byNo) };
+  });
 }
 
 /* ---------- 확인·고치기 표 ---------- */
@@ -1406,7 +1426,7 @@ function showImportPreview(groups) {
         <input type="checkbox" id="imp-on-${i}" checked aria-label="${esc(g.name)} 포함">
         <input type="text" id="imp-name-${i}" value="${esc(g.name)}" aria-label="반 이름">
       </div>
-      <div class="names">${g.students.length}명 · ${g.students.slice(0, 4).map(s => `${s.no ?? ""} ${esc(s.name)}`.trim()).join(", ")}${g.students.length > 4 ? " …" : ""}</div>
+      <div class="names">${g.students.length}명${new Set(g.students.map(homeOf)).size > 1 ? ` · 여러 반 학생 (${[...new Set(g.students.map(homeOf))].filter(Boolean).slice(0, 5).join(", ")}${new Set(g.students.map(homeOf)).size > 5 ? " …" : ""})` : ""} · ${g.students.slice(0, 4).map(s => `${s.no ?? ""} ${esc(s.name)}`.trim()).join(", ")}${g.students.length > 4 ? " …" : ""}</div>
       <div class="warn" id="imp-warn-${i}" hidden>같은 이름의 반이 있어요. 명단을 새로 맞추고, 지난 출결 기록은 그대로 둡니다.</div>
     </div>`).join("")}
     <div class="acts">
@@ -1434,15 +1454,15 @@ function applyImport(name, list) {
   const cls = termClasses().find(c => c.name === name);
   if (!cls) {
     db.classes.push({ id: uid(), name, term: S.term, createdAt: nowDT(),
-      students: list.map((s, i) => ({ id: uid(), no: s.no, ord: i, name: s.name, addedAt: null, leftAt: null, off: [] })) });
+      students: list.map((s, i) => ({ id: uid(), no: s.no, ord: i, hg: s.hg, hc: s.hc, name: s.name, addedAt: null, leftAt: null, off: [] })) });
     return;
   }
   // 같은 반이면 이름으로 맞춰 기존 기록을 유지
   const now = nowDT(), used = new Set();
   const next = list.map((s, i) => {
     const ex = cls.students.find(x => x.name === s.name && !used.has(x.id));
-    if (ex) { used.add(ex.id); ex.no = s.no; ex.ord = i; ex.leftAt = null; ex.leftNote = null; return ex; }
-    return { id: uid(), no: s.no, ord: i, name: s.name, addedAt: now, leftAt: null, off: [] };
+    if (ex) { used.add(ex.id); ex.no = s.no; ex.ord = i; ex.hg = s.hg; ex.hc = s.hc; ex.leftAt = null; ex.leftNote = null; return ex; }
+    return { id: uid(), no: s.no, ord: i, hg: s.hg, hc: s.hc, name: s.name, addedAt: now, leftAt: null, off: [] };
   });
   cls.students.forEach(s => { if (!used.has(s.id)) { if (!s.leftAt) { s.leftAt = now; s.leftNote = "전출"; } next.push(s); } });
   cls.students = next;
@@ -1469,11 +1489,12 @@ function buildWorkbook(classes) {
   for (const cls of classes) {
     const ses = classSessions(cls.id);
     const studs = [...cls.students].sort(byNo);
+    const mixed = isMixed(cls);
     const aoa = [
       [`${cls.name} 출석부`],
       [`내보낸 시각 ${stamp}  ·  O = 출석, X = 결석, 위탁·수능 준비반·숙려제 등 = 출석 제외, - = 그때 명단에 없음`],
       [],
-      ["번호", "이름", ...ses.map(s => colDT(s.dt)), "출석 수", "결석 수"]
+      [...(mixed ? ["소속"] : []), "번호", "이름", ...ses.map(s => colDT(s.dt)), "출석 수", "결석 수"]
     ];
     for (const st of studs) {
       let p = 0, a = 0;
@@ -1483,11 +1504,11 @@ function buildWorkbook(classes) {
         if (s.absent.includes(st.id)) { a++; return "X"; }
         p++; return "O";
       });
-      aoa.push([st.no, st.name + (st.leftAt ? ` (${st.leftNote || "전출"})` : ""), ...cells, p, a]);
+      aoa.push([...(mixed ? [homeOf(st)] : []), st.no, st.name + (st.leftAt ? ` (${st.leftNote || "전출"})` : ""), ...cells, p, a]);
     }
-    aoa.push(["", "결석 인원", ...ses.map(s => s.absent.length), "", ""]);
+    aoa.push([...(mixed ? [""] : []), "", "결석 인원", ...ses.map(s => s.absent.length), "", ""]);
     const ws = XLSX.utils.aoa_to_sheet(aoa);
-    ws["!cols"] = [{ wch: 6 }, { wch: 14 }, ...ses.map(() => ({ wch: 14 })), { wch: 8 }, { wch: 8 }];
+    ws["!cols"] = [...(mixed ? [{ wch: 7 }] : []), { wch: 6 }, { wch: 14 }, ...ses.map(() => ({ wch: 14 })), { wch: 8 }, { wch: 8 }];
     XLSX.utils.book_append_sheet(wb, ws, sheetName(cls.name, used));
     for (const s of ses) {
       const all = activeAt(cls, s.dt).length, n = callAt(cls, s.dt).length;
@@ -1939,7 +1960,7 @@ window.addEventListener("beforeunload", e => {
 });
 
 // 테스트용으로 바깥에 노출
-window.__att = { parseRows, parseWorkbook, buildWorkbook, get db() { return db; } };
+window.__att = { parseRows, parseWorkbook, buildWorkbook, handleBuffer, get db() { return db; } };
 
 // 앱을 열면 마지막으로 쓰던 학기로 (없으면 가장 최근 수업한 반의 학기, 그것도 없으면 지금 학기)
 function startTerm() {
