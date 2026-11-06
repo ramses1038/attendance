@@ -348,7 +348,13 @@ main.wrap { padding-block: 16px 140px; display: flex; flex-direction: column; ga
 .term-chip svg { width: 18px; height: 18px; color: var(--muted); }
 .list-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .btn.small { min-height: 36px; padding: 0 12px; font-size: 14px; border-radius: 10px; }
-.editing-card { cursor: default; }
+.editing-card { cursor: default; transition: transform .15s ease; }
+.editing-card .cgrip { grid-row: 1 / span 2; grid-column: 2; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: var(--muted); border-radius: 10px; cursor: grab; }
+.editing-card .cgrip svg { width: 24px; height: 24px; }
+.editing-card.dragging { transition: none; position: relative; z-index: 3; box-shadow: 0 8px 24px rgba(24,38,58,.25); }
+.editing-card.moved { background: var(--accent-soft); }
+.class-card { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
+.class-card.hold { transform: scale(.98); transition: transform .3s; }
 .card-acts { grid-column: 1 / -1; display: flex; gap: 8px; margin-top: 8px; }
 .card-acts .btn { flex: 1; }
 .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: var(--bg); border-radius: 12px; padding: 4px; }
@@ -502,7 +508,7 @@ function render() {
 
 /* ---------- 홈: 반 선택 ---------- */
 function renderHome() {
-  const classes = termClasses().sort((a, b) => a.name.localeCompare(b.name, "ko", { numeric: true }));
+  const classes = sortedClasses();
   const today = prettyDT(nowDT(), false);
   const ed = !!S.editHome;
   let body;
@@ -518,15 +524,16 @@ function renderHome() {
   } else {
     body = `<div class="list-head">${termChip()}
       <button class="btn small ${ed ? "primary" : ""}" data-act="edit-home">${ed ? "완료" : "반 편집"}</button></div>
-      ${ed ? `<p class="help">지우거나 이름을 바꿀 반을 고르세요.</p>` : ""}
+      ${ed ? `<p class="help">⠿를 <b>끌어서</b> 반 순서를 바꾸고, 이름 바꾸기·반 지우기를 할 수 있어요. 다 했으면 <b>완료</b>를 눌러 주세요.</p>` : ""}
       <div class="class-list">${classes.map(c => {
       const ses = classSessions(c.id);
       const last = ses[ses.length - 1];
       const lastMemo = [...ses].reverse().find(s => (s.memo || "").trim());
       const n = c.students.filter(s => !s.leftAt).length;
       const meta = `재적 ${n}명 · ${last ? "지난 수업 " + prettyDT(last.dt) : "아직 기록 없음"}`;
-      if (ed) return `<div class="class-card editing-card">
+      if (ed) return `<div class="class-card editing-card" data-cid="${c.id}">
         <span class="name">${esc(c.name)}</span>
+        <span class="cgrip" aria-label="끌어서 순서 바꾸기">${ICON.grip}</span>
         <span class="meta">${meta} · 수업 기록 ${ses.length}회</span>
         <span class="card-acts"><button class="btn small" data-rename="${c.id}">이름 바꾸기</button><button class="btn small danger" data-delclass="${c.id}">반 지우기</button></span>
       </div>`;
@@ -537,7 +544,7 @@ function renderHome() {
         ${lastMemo ? `<span class="memo">${esc(lastMemo.memo.split("\n")[0])}</span>` : ""}
       </button>`;
     }).join("")}</div>
-    ${ed ? "" : `<p class="help">학생을 누르면 <b>결석</b>, 아무것도 누르지 않으면 <b>출석</b>으로 저장돼요.</p>`}
+    ${ed ? "" : `<p class="help">반을 <b>꾹 누르면</b> 반 편집(순서 바꾸기·이름 바꾸기·지우기)이 열려요.</p>`}
     <div class="sync-line" id="sync-line"></div>`;
   }
   app.innerHTML = `
@@ -551,6 +558,75 @@ function renderHome() {
       <button class="btn primary" data-act="export">${ICON.share}출석부 내보내기</button>
     </div></div>` : ""}`;
   updateSyncLine();
+  const list = app.querySelector(".class-list");
+  if (list) ed ? bindClassDrag(list) : bindClassHold(list);
+}
+// 반 순서: 직접 정한 순서(order) → 없으면 이름순
+const sortedClasses = () => termClasses().sort((a, b) =>
+  (a.order ?? 1e9) - (b.order ?? 1e9) || a.name.localeCompare(b.name, "ko", { numeric: true }));
+// 반 꾹 누르기 → 진동과 함께 반 편집
+function bindClassHold(list) {
+  let h = null;
+  const cancel = () => { if (h) { clearTimeout(h.timer); h.card.classList.remove("hold"); h = null; } };
+  list.addEventListener("pointerdown", e => {
+    const card = e.target.closest("[data-open]"); if (!card) return;
+    S.held = false;
+    h = { card, x: e.clientX, y: e.clientY };
+    card.classList.add("hold");
+    h.timer = setTimeout(() => { h = null; S.held = true; buzz(40); S.editHome = true; renderHome(); }, 500);
+  });
+  list.addEventListener("pointermove", e => { if (h && Math.hypot(e.clientX - h.x, e.clientY - h.y) > 10) cancel(); });
+  ["pointerup", "pointercancel", "pointerleave"].forEach(ev => list.addEventListener(ev, cancel));
+  list.addEventListener("contextmenu", e => { if (e.target.closest(".class-card")) e.preventDefault(); });
+}
+// 반 편집에서 ⠿ 끌어다 놓기
+function bindClassDrag(list) {
+  let d = null, raf = 0;
+  function update() {
+    if (!d) return;
+    const dy = d.y - d.y0 + (window.scrollY - d.sc0);
+    d.card.style.transform = `translateY(${dy}px)`;
+    const c = d.mid[d.i] + dy;
+    let to = 0; d.mid.forEach((m, j) => { if (j !== d.i && m < c) to++; });
+    d.to = to;
+    d.rows.forEach((r, j) => {
+      if (j === d.i) return;
+      const sh = d.i < to && j > d.i && j <= to ? -d.step : d.i > to && j >= to && j < d.i ? d.step : 0;
+      r.style.transform = sh ? `translateY(${sh}px)` : "";
+    });
+  }
+  function autoScroll() {
+    raf = 0; if (!d) return;
+    const top = 90, bot = innerHeight - 40; let v = 0;
+    if (d.y < top) v = -Math.ceil((top - d.y) / 6); else if (d.y > bot) v = Math.ceil((d.y - bot) / 6);
+    if (v) { window.scrollBy(0, v); update(); raf = requestAnimationFrame(autoScroll); }
+  }
+  list.addEventListener("pointerdown", e => {
+    const g = e.target.closest(".cgrip"); if (!g) return;
+    e.preventDefault();
+    const card = g.closest("[data-cid]"), all = [...list.children];
+    try { g.setPointerCapture(e.pointerId); } catch (_) {}
+    const i = all.indexOf(card);
+    d = { card, i, to: i, rows: all, y0: e.clientY, y: e.clientY, sc0: window.scrollY,
+          mid: all.map(r => { const b = r.getBoundingClientRect(); return b.top + b.height / 2; }),
+          step: all.length > 1 ? all[1].getBoundingClientRect().top - all[0].getBoundingClientRect().top : 0 };
+    card.classList.add("dragging"); buzz(20);
+  });
+  list.addEventListener("pointermove", e => {
+    if (!d) return; d.y = e.clientY; e.preventDefault(); update();
+    if (!raf) raf = requestAnimationFrame(autoScroll);
+  });
+  const end = () => {
+    if (!d) return; const x = d; d = null;
+    if (raf) cancelAnimationFrame(raf), raf = 0;
+    const cls = sortedClasses();
+    const [m] = cls.splice(x.i, 1); cls.splice(x.to, 0, m);
+    cls.forEach((c, k) => c.order = k);
+    persist(); renderHome();
+    if (x.to !== x.i) { const mv = app.querySelector(`[data-cid="${m.id}"]`); if (mv) mv.classList.add("moved"); }
+  };
+  list.addEventListener("pointerup", end);
+  list.addEventListener("pointercancel", end);
 }
 const termChip = () => `<button class="term-chip" data-act="term">${termLabel(S.term)}${ICON.down}</button>`;
 function setTerm(t) {
@@ -1453,7 +1529,8 @@ function showImportPreview(groups) {
 function applyImport(name, list) {
   const cls = termClasses().find(c => c.name === name);
   if (!cls) {
-    db.classes.push({ id: uid(), name, term: S.term, createdAt: nowDT(),
+    const ord = termClasses().reduce((m, c) => Math.max(m, c.order ?? -1), -1) + 1;
+    db.classes.push({ id: uid(), name, term: S.term, order: ord, createdAt: nowDT(),
       students: list.map((s, i) => ({ id: uid(), no: s.no, ord: i, hg: s.hg, hc: s.hc, name: s.name, addedAt: null, leftAt: null, off: [] })) });
     return;
   }
@@ -1892,7 +1969,7 @@ app.addEventListener("click", e => {
   const t = e.target.closest("button");
   if (!t) return;
   if (t.dataset.sid) { if (S.held) { S.held = false; return; } return toggle(t.dataset.sid); }
-  if (t.dataset.open) return openClass(t.dataset.open);
+  if (t.dataset.open) { if (S.held) { S.held = false; return; } return openClass(t.dataset.open); }
   if (t.dataset.stu) return openStudent(t.dataset.stu);
   if (t.dataset.per) return changeSlot(S.draft.date, +t.dataset.per);
   if (t.dataset.view) return openSession(t.dataset.view);
