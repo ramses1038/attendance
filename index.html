@@ -153,6 +153,16 @@ main.wrap { padding-block: 16px 140px; display: flex; flex-direction: column; ga
 
 /* 일시 + 재적 */
 .session-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
+.slot { display: flex; flex-direction: column; gap: 10px; }
+.wd { font-weight: 600; color: var(--muted); white-space: nowrap; }
+.per-row { display: flex; align-items: center; gap: 8px; }
+.periods { flex: 1; min-width: 0; display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); gap: 4px; border-radius: 12px; }
+.periods.need { outline: 2px solid var(--absent); outline-offset: 3px; }
+.per { position: relative; min-height: 44px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 10px; font-weight: 700; font-size: 16px; font-variant-numeric: tabular-nums; padding: 0; }
+.per.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.per.has::after { content: ""; position: absolute; left: 50%; bottom: 5px; width: 5px; height: 5px; margin-left: -2.5px; border-radius: 50%; background: var(--accent); }
+.per.on.has::after { background: var(--accent-ink); }
+.pick-hint { font-size: 13px; color: var(--accent); font-weight: 600; }
 .dt-field { display: flex; align-items: center; gap: 8px; }
 .dt-field input {
   border: 1px solid var(--line); background: var(--surface); border-radius: 10px;
@@ -363,11 +373,17 @@ function nowDT() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 const WD = "일월화수목금토";
+// 수업 기록 열쇠: 'YYYY-MM-DD P03' (= 3교시). 예전 기록은 'YYYY-MM-DD HH:MM'
+const slotKey = (date, period) => `${date} P${pad(period || 0)}`;
+const periodOf = dt => { const t = (dt || "").slice(11); return t[0] === "P" ? (+t.slice(1) || null) : null; };
+const timeLabel = t => !t ? "" : t[0] === "P" ? (+t.slice(1) ? `${+t.slice(1)}교시` : "") : t;
+const todayStr = () => nowDT().slice(0, 10);
 function prettyDT(dt, withTime = true) {
   const [d, t] = dt.split(" ");
   const [y, m, dd] = d.split("-").map(Number);
   const w = WD[new Date(y, m - 1, dd).getDay()];
-  return `${m}월 ${dd}일 (${w})` + (withTime && t ? ` ${t}` : "");
+  const tl = timeLabel(t);
+  return `${m}월 ${dd}일 (${w})` + (withTime && tl ? ` ${tl}` : "");
 }
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const byNo = (a, b) => (a.no ?? 9999) - (b.no ?? 9999) || (a.ord ?? 0) - (b.ord ?? 0) || a.name.localeCompare(b.name, "ko");
@@ -544,10 +560,23 @@ function renameClass(cls) {
 }
 
 /* ---------- 반: 출석 체크 ---------- */
+function draftFrom(s, edit) {
+  return { id: s.id, dt: s.dt, date: s.dt.slice(0, 10), period: periodOf(s.dt), absent: new Set(s.absent), memo: s.memo || "", edit: !!edit };
+}
+const findSlot = (clsId, date, period) => period && db.sessions.find(s => s.classId === clsId && s.dt === slotKey(date, period));
+const slotPrefKey = (clsId, date) => `${clsId}:${new Date(date + "T00:00").getDay()}`;
+// 오늘 열면: 이 반이 같은 요일에 쓰던 교시를 먼저 고르고, 그 교시 기록이 오늘 있으면 이어서 씀
+function newDraft(clsId) {
+  const date = todayStr();
+  const per = (prefs.slots || {})[slotPrefKey(clsId, date)] || null;
+  let ex = findSlot(clsId, date, per);
+  if (!ex && !per) ex = classSessions(clsId).filter(s => s.dt.slice(0, 10) === date).pop();
+  if (ex) return draftFrom(ex);
+  return { id: null, date, period: per, dt: slotKey(date, per), absent: new Set(), memo: "", edit: false };
+}
 function openClass(id, sessionId) {
   const s = sessionId && db.sessions.find(x => x.id === sessionId);
-  S.draft = s ? { id: s.id, dt: s.dt, absent: new Set(s.absent), memo: s.memo || "" }
-              : { id: null, dt: nowDT(), absent: new Set(), memo: "" };
+  S.draft = s ? draftFrom(s, true) : newDraft(id);
   S.classId = id; S.view = "class"; S.dirty = false; S.filter = "all";
   const c = getClass(id); if (c && prefs.term !== c.term) { prefs.term = c.term; savePrefs(); }
   history.pushState({ v: "class" }, "");
@@ -584,13 +613,22 @@ function renderClass() {
              : `<span class="text">아직 남긴 진도 메모가 없어요.</span>`}
       </section>
 
-      <div class="session-head">
-        <label class="dt-field"><span class="label">수업 일시</span>
-          <input type="datetime-local" id="dt" value="${d.dt.replace(" ", "T")}" step="60">
+      <div class="slot">
+        <label class="dt-field"><span class="label">수업일</span>
+          <input type="date" id="sdate" value="${d.date}">
+          <span class="wd">${WD[new Date(d.date + "T00:00").getDay()]}요일</span>
         </label>
-        <div class="tally" id="tally"></div>
+        <div class="per-row">
+          <span class="label">교시</span>
+          <div class="periods" role="radiogroup" aria-label="교시">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => {
+            const has = findSlot(cls.id, d.date, n);
+            return `<button class="per${d.period === n ? " on" : ""}${has ? " has" : ""}" data-per="${n}" role="radio" aria-checked="${d.period === n}" aria-label="${n}교시${has ? ", 기록 있음" : ""}">${n}</button>`;
+          }).join("")}</div>
+        </div>
+        ${d.period ? "" : `<div class="pick-hint">${d.id ? "예전 방식(시간)으로 저장된 기록이에요. 교시를 고르면 교시 기록으로 바뀌어요." : "몇 교시 수업인지 골라 주세요. 점이 있는 교시는 이미 기록이 있어요."}</div>`}
       </div>
-      ${d.id ? `<div class="editing">저장된 기록을 고치는 중이에요</div>` : ""}
+      <div class="tally" id="tally"></div>
+      ${d.id ? `<div class="editing">${prettyDT(d.dt)} 기록을 ${d.edit ? "고치는" : "이어서 쓰는"} 중이에요</div>` : ""}
 
       <div class="filter-note" id="filter-note"></div>
       <div class="grid" id="grid"></div>
@@ -601,15 +639,14 @@ function renderClass() {
       </label>
     </main>
     <div class="dock"><div class="wrap">
-      <button class="btn primary" data-act="save">${d.id ? "고친 내용 저장" : "출석 저장"}</button>
+      <button class="btn primary" data-act="save">${d.id ? "저장" : "출석 저장"}</button>
     </div></div>`;
 
   drawGrid();
   document.getElementById("memo").oninput = e => { d.memo = e.target.value; S.dirty = true; };
-  document.getElementById("dt").onchange = e => {
-    if (!e.target.value) return;
-    d.dt = e.target.value.replace("T", " ").slice(0, 16); S.dirty = true;
-    renderClass();
+  document.getElementById("sdate").onchange = e => {
+    if (!e.target.value) return renderClass();
+    changeSlot(e.target.value, d.period);
   };
 }
 const tallyHTML = (all, n, a) => {
@@ -647,17 +684,71 @@ function toggle(sid) {
   drawGrid();
 }
 
-function saveSession() {
+function changeSlot(date, period) {
+  const d = S.draft;
+  if (date === d.date && period === d.period) return;
+  const ex = findSlot(S.classId, date, period);
+  if (ex && ex.id === d.id) return;
+  const unsaved = S.dirty && (d.absent.size || d.memo.trim() || d.id);
+  const go = fn => unsaved ? ask({
+      title: "바꾼 내용을 먼저 저장할까요?",
+      body: `${prettyDT(d.dt)}에 체크하거나 적은 내용이 아직 저장되지 않았어요.`,
+      actions: [
+        { label: "저장하고 넘어가기", cls: "primary", fn: () => { if (d.period && saveSession(true)) fn(); else renderClass(); } },
+        { label: "저장하지 않고 넘어가기", cls: "danger", fn },
+        { label: "취소", fn: renderClass }
+      ] }) : fn();
+  // 예전(시간) 기록을 이미 기록이 있는 교시로 옮기면 두 기록을 합칠 수 있게
+  if (ex && d.id && !d.period) {
+    return ask({ title: `${prettyDT(ex.dt)}에 이미 기록이 있어요`, body: "두 기록을 하나로 합칠까요? 결석 체크와 진도 메모를 모두 모아서 저장해요.",
+      actions: [
+        { label: "두 기록 합치기", cls: "primary", fn: () => {
+          const mine = db.sessions.find(x => x.id === d.id) || { absent: [], memo: "" };
+          const absent = new Set([...ex.absent, ...d.absent]);
+          const memos = [...new Set([ex.memo, d.memo].map(m => (m || "").trim()).filter(Boolean))];
+          ex.absent = [...absent]; ex.memo = memos.join("\n");
+          db.sessions = db.sessions.filter(x => x.id !== d.id);
+          persist(); S.draft = draftFrom(ex); S.dirty = false; renderClass(); toast("두 기록을 합쳤어요");
+        } },
+        { label: "그 기록 불러오기", fn: () => { S.draft = draftFrom(ex); S.dirty = false; renderClass(); } },
+        { label: "취소", fn: renderClass }
+      ] });
+  }
+  if (ex) return go(() => { S.draft = draftFrom(ex); S.dirty = false; renderClass(); toast(`${prettyDT(ex.dt)} 기록을 불러왔어요`); });
+  // 빈 칸으로: 새 기록은 체크한 채로 옮기고, 과거조회에서 고치는 기록은 교시를 옮김, 오늘 이어 쓰던 기록은 새로 시작
+  if (!d.id || d.edit || !d.period) {
+    d.date = date; d.period = period;
+    d.dt = period ? slotKey(date, period) : d.dt;
+    if (!period && d.dt.slice(0, 10) !== date) d.dt = slotKey(date, 0);
+    S.dirty = true; return renderClass();
+  }
+  go(() => { S.draft = { id: null, date, period, dt: slotKey(date, period), absent: new Set(), memo: "", edit: false }; S.dirty = false; renderClass(); });
+}
+
+function saveSession(quiet) {
+  const d0 = S.draft;
+  if (!d0.period && !(d0.id && !/ P/.test(d0.dt))) {
+    buzz([60, 40, 60]);
+    const el = document.querySelector(".periods"); if (el) { el.classList.add("need"); el.scrollIntoView({ block: "center", behavior: "smooth" }); }
+    toast("몇 교시 수업인지 먼저 골라 주세요");
+    return false;
+  }
+  // 같은 날·같은 교시 기록이 이미 있으면 그 기록에 합침
+  const dup = d0.period && db.sessions.find(s => s.classId === S.classId && s.dt === d0.dt && s.id !== d0.id);
+  if (dup) { if (d0.id) db.sessions = db.sessions.filter(s => s.id !== d0.id); d0.id = dup.id; }
+  if (d0.period) { prefs.slots = prefs.slots || {}; prefs.slots[slotPrefKey(S.classId, d0.date)] = d0.period; savePrefs(); }
+  return saveSessionCore(quiet);
+}
+function saveSessionCore(quiet) {
   const d = S.draft; const cls = getClass(S.classId);
   const ids = new Set(callAt(cls, d.dt).map(s => s.id));
   const rec = { id: d.id || uid(), classId: cls.id, dt: d.dt, absent: [...d.absent].filter(id => ids.has(id)), memo: d.memo.trim() };
   const i = db.sessions.findIndex(s => s.id === rec.id);
   if (i >= 0) db.sessions[i] = rec; else db.sessions.push(rec);
   if (!persist()) return false;
-  const wasNew = !d.id;
-  d.id = rec.id; S.dirty = false;
-  toast(`${prettyDT(rec.dt)} 출석을 저장했어요 (결석 ${rec.absent.length}명)`);
-  if (wasNew) renderClass();
+  d.id = rec.id; d.edit = false; S.dirty = false;
+  toast(`${prettyDT(rec.dt)} 기록을 저장했어요 (결석 ${rec.absent.length}명${rec.memo ? ", 진도 메모 있음" : ""})`);
+  if (!quiet && S.view === "class") renderClass();
   return true;
 }
 
@@ -1333,11 +1424,11 @@ function sheetName(name, used) {
   while (used.has(n)) n = `${base} ${k++}`;
   used.add(n); return n;
 }
-// 엑셀 날짜 칸: 11/04(수) 13:20
+// 엑셀 날짜 칸: 11/04(수) 3교시
 function colDT(dt) {
   const [d, t] = dt.split(" ");
   const [y, m, dd] = d.split("-").map(Number);
-  return `${pad(m)}/${pad(dd)}(${WD[new Date(y, m - 1, dd).getDay()]}) ${t}`;
+  return `${pad(m)}/${pad(dd)}(${WD[new Date(y, m - 1, dd).getDay()]}) ${timeLabel(t)}`.trim();
 }
 function buildWorkbook(classes) {
   const wb = XLSX.utils.book_new();
@@ -1736,13 +1827,14 @@ app.addEventListener("click", e => {
   if (t.dataset.sid) return toggle(t.dataset.sid);
   if (t.dataset.open) return openClass(t.dataset.open);
   if (t.dataset.stu) return openStudent(t.dataset.stu);
+  if (t.dataset.per) return changeSlot(S.draft.date, +t.dataset.per);
   if (t.dataset.view) return openSession(t.dataset.view);
   if (t.dataset.vf) { S.filter = S.filter === t.dataset.vf ? "all" : t.dataset.vf; return renderSession(); }
   if (t.dataset.tally) { const k = t.dataset.tally; S.filter = S.filter === k || k === "all" ? "all" : k; return drawGrid(); }
   if (t.dataset.delclass) return deleteClass(getClass(t.dataset.delclass));
   if (t.dataset.rename) return renameClass(getClass(t.dataset.rename));
   if (t.dataset.edit) { S.view = "class"; const s = db.sessions.find(x => x.id === t.dataset.edit);
-    S.draft = { id: s.id, dt: s.dt, absent: new Set(s.absent), memo: s.memo || "" }; S.dirty = false; S.filter = "all"; return render(); }
+    S.draft = draftFrom(s, true); S.dirty = false; S.filter = "all"; return render(); }
   if (t.dataset.del) {
     const s = db.sessions.find(x => x.id === t.dataset.del);
     return ask({ title: `${prettyDT(s.dt)} 기록을 지울까요?`, body: "지운 기록은 되돌릴 수 없어요.",
@@ -1779,7 +1871,7 @@ app.addEventListener("click", e => {
       } else { S.view = "records"; render(); }
       break;
     case "to-class": case "new-session":
-      S.draft = { id: null, dt: nowDT(), absent: new Set(), memo: "" }; S.dirty = false; S.filter = "all"; S.view = "class"; render(); break;
+      S.draft = newDraft(S.classId); S.dirty = false; S.filter = "all"; S.view = "class"; render(); break;
     case "del-class":
       deleteClass(cls, () => { S.view = "home"; S.classId = null; history.back(); render(); });
       break;
