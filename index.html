@@ -386,7 +386,7 @@ function termOf(dt) {
   const y = +dt.slice(0, 4), m = +dt.slice(5, 7);
   return m >= 3 && m <= 8 ? `${y}-1` : m >= 9 ? `${y}-2` : `${y - 1}-2`;
 }
-const termLabel = t => { const [y, n] = t.split("-"); return `${y}년 ${n}학기`; };
+const termLabel = t => { const [y, n] = t.split("-"); return `${y}학년도 ${n}학기`; };
 const termCmp = (a, b) => b.localeCompare(a);
 db.classes.forEach(c => { if (!c.term) c.term = termOf(c.createdAt || "2026-03-02 00:00"); });
 const termClasses = () => db.classes.filter(c => c.term === S.term);
@@ -510,8 +510,9 @@ function renderHome() {
       </div>
     </div>`;
   } else {
-    body = `<div class="list-head"><span class="label">${ed ? "지우거나 이름을 바꿀 반을 고르세요" : "수업할 반을 고르세요"}</span>
+    body = `<div class="list-head">${termChip()}
       <button class="btn small ${ed ? "primary" : ""}" data-act="edit-home">${ed ? "완료" : "반 편집"}</button></div>
+      ${ed ? `<p class="help">지우거나 이름을 바꿀 반을 고르세요.</p>` : ""}
       <div class="class-list">${classes.map(c => {
       const ses = classSessions(c.id);
       const last = ses[ses.length - 1];
@@ -536,7 +537,7 @@ function renderHome() {
   app.innerHTML = `
     <header class="bar"><div class="wrap"><h1>수업 출석부</h1><span class="sub">${today}</span><button class="icon-btn lbl drive-btn" data-act="settings" aria-label="구글 드라이브 백업"><span class="ic">${ICON.drive}<i class="st-dot" id="st-dot"></i></span>구글 드라이브<span class="st-text" id="st-text"></span></button></div></header>
     <main class="wrap">
-      <button class="term-chip" data-act="term">${termLabel(S.term)}${ICON.down}</button>
+      ${classes.length ? "" : termChip()}
       ${body}
     </main>
     ${classes.length && !ed ? `<div class="dock"><div class="wrap">
@@ -545,6 +546,7 @@ function renderHome() {
     </div></div>` : ""}`;
   updateSyncLine();
 }
+const termChip = () => `<button class="term-chip" data-act="term">${termLabel(S.term)}${ICON.down}</button>`;
 function setTerm(t) {
   S.term = t; S.editHome = false; prefs.term = t; savePrefs(); render();
 }
@@ -552,7 +554,7 @@ function openTermSheet() {
   const set = new Set(db.classes.map(c => c.term)); set.add(S.term); set.add(termOf(nowDT()));
   const terms = [...set].sort(termCmp);
   const cur = termOf(nowDT());
-  sheet(`<h2>연도·학기 고르기</h2>
+  sheet(`<h2>학년도·학기 고르기</h2>
     <div class="acts">${terms.map(t => {
       const n = db.classes.filter(c => c.term === t).length;
       return `<button class="btn block ${t === S.term ? "primary" : ""}" data-t="${t}">${termLabel(t)} · 반 ${n}개${t === cur ? " (지금 학기)" : ""}</button>`;
@@ -560,7 +562,7 @@ function openTermSheet() {
     <div class="set">
       <span class="label">다른 학기 만들기</span>
       <div class="set-row">
-        <label class="field grow"><span class="label">연도</span><input id="tm-y" type="number" inputmode="numeric" value="${cur.slice(0, 4)}"></label>
+        <label class="field grow"><span class="label">학년도</span><input id="tm-y" type="number" inputmode="numeric" value="${cur.slice(0, 4)}"></label>
         <div class="seg" style="flex:1" role="radiogroup"><button data-n="1" class="${cur.endsWith("1") ? "on" : ""}">1학기</button><button data-n="2" class="${cur.endsWith("2") ? "on" : ""}">2학기</button></div>
       </div>
       <button class="btn block" id="tm-go">이 학기로 가기</button>
@@ -572,8 +574,8 @@ function openTermSheet() {
     el.querySelectorAll("[data-n]").forEach(b => b.onclick = () => { n = b.dataset.n; el.querySelectorAll("[data-n]").forEach(x => x.classList.toggle("on", x === b)); });
     el.querySelector("#tm-go").onclick = () => {
       const y = parseInt(el.querySelector("#tm-y").value, 10);
-      if (!(y >= 2000 && y <= 2100)) return toast("연도를 확인해 주세요");
-      close(); setTerm(`${y}-${n}`); toast(`${y}년 ${n}학기로 왔어요`);
+      if (!(y >= 2000 && y <= 2100)) return toast("학년도를 확인해 주세요");
+      close(); setTerm(`${y}-${n}`); toast(`${termLabel(`${y}-${n}`)}로 왔어요`);
     };
     el.querySelector("#tm-close").onclick = close;
   });
