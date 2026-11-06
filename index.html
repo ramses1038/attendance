@@ -313,10 +313,15 @@ main.wrap { padding-block: 16px 140px; display: flex; flex-direction: column; ga
 .field.no-f { width: 84px; flex: none; }
 .field.grow { flex: 1; min-width: 0; }
 .seg4 { grid-template-columns: 1fr 1fr; }
+.seg4 button:last-child { grid-column: 1 / -1; }
 .fmt { border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; align-self: flex-start; }
 .fmt th, .fmt td { border: 1px solid var(--line); padding: 4px 12px; text-align: center; }
 .fmt th { background: var(--accent-soft); font-weight: 600; }
-.ed-head, .ed-row { display: grid; grid-template-columns: 46px 52px 54px minmax(0, 1fr) 36px; gap: 4px; align-items: center; }
+.ed-head, .ed-row { display: grid; grid-template-columns: 40px 44px 44px minmax(0, 1fr) 30px 28px; gap: 4px; align-items: center; }
+.ed-mv { display: flex; flex-direction: column; gap: 2px; }
+.ed-mv button { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 6px; height: 20px; padding: 0; font-size: 10px; line-height: 1; }
+.ed-mv button:disabled { opacity: .3; }
+.ed-row.moved input { background: var(--accent-soft); transition: background .6s; }
 .ed-head span { font-size: 12px; color: var(--muted); font-weight: 600; text-align: center; }
 .ed { display: flex; flex-direction: column; gap: 4px; }
 .ed-row input { min-width: 0; width: 100%; min-height: 42px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 8px; padding: 0 6px; text-align: center; font-size: 15px; font-variant-numeric: tabular-nums; }
@@ -781,7 +786,7 @@ const prefs = (() => { try { return JSON.parse(localStorage.getItem(KEY + ".pref
 function savePrefs() { try { localStorage.setItem(KEY + ".prefs", JSON.stringify(prefs)); } catch (e) {} }
 
 /* ---------- 명단 관리 ---------- */
-const REASONS = ["위탁", "수능 준비반"];
+const REASONS = ["위탁", "수능 준비반", "숙려제"];
 // 지금 체크 중인(저장 전) 수업이 있으면 그 시각부터 바로 반영
 function effT(cls) {
   const now = nowDT(), d = S.draft;
@@ -857,11 +862,12 @@ function openStudent(sid) {
       <div class="seg seg4" role="radiogroup">
         <button data-off="위탁" class="${cur === "위탁" ? "on" : ""}">위탁</button>
         <button data-off="수능 준비반" class="${cur === "수능 준비반" ? "on" : ""}">수능 준비반</button>
+        <button data-off="숙려제" class="${cur === "숙려제" ? "on" : ""}">숙려제</button>
         <button data-off="기타" class="${custom ? "on" : ""}">기타 사유</button>
         <button data-off="" class="${!cur ? "on" : ""}">복귀함</button>
       </div>
       <label class="field" id="st-why-f" ${custom ? "" : "hidden"}><span class="label">사유</span><input id="st-why" type="text" maxlength="10" placeholder="예: 장기 입원" value="${custom ? esc(cur) : ""}"></label>
-      <p class="help">위탁·수능 준비반·기타 사유를 고른 학생은 명단에 그대로 남지만 터치 출석과 음성 출석에서 빠져요. 엑셀에는 그날 칸에 사유가 적혀요. 다시 수업에 들어오면 <b>복귀함</b>을 눌러 주세요.</p>
+      <p class="help">위탁·수능 준비반·숙려제·기타 사유를 고른 학생은 명단에 그대로 남지만 출석 체크에서 빠져요. 엑셀에는 그날 칸에 사유가 적혀요. 다시 수업에 들어오면 <b>복귀함</b>을 눌러 주세요.</p>
     </div>
     <div class="acts">
       <button class="btn primary block" id="st-save">저장</button>
@@ -1186,8 +1192,8 @@ function groupByDef(rows) {
 function openRowEditor(rows, def, title) {
   let list = rows.map(r => ({ grade: r.grade ?? "", cls: r.cls ?? "", no: r.no ?? "", name: r.name || "", def: r.def || def }));
   sheet(`<h2>${esc(title)}</h2>
-    <p class="help">틀린 글자는 눌러서 고치고, 필요 없는 줄은 ✕로 지워 주세요. 학년·반·번호는 비워 둬도 되지만 이름은 꼭 넣어야 해요.</p>
-    <div class="ed-head"><span>학년</span><span>반</span><span>번호</span><span>이름</span><span></span></div>
+    <p class="help">틀린 글자는 눌러서 고치고, ▲▼로 순서를 바꾸고, 필요 없는 줄은 ✕로 지워 주세요. 학년·반·번호는 비워 둬도 되지만 이름은 꼭 넣어야 해요.</p>
+    <div class="ed-head"><span>학년</span><span>반</span><span>번호</span><span>이름</span><span>순서</span><span></span></div>
     <div class="ed" id="ed"></div>
     <button class="btn block" id="ed-add">+ 줄 추가</button>
     <div class="ed-warn" id="ed-warn" hidden></div>
@@ -1196,12 +1202,13 @@ function openRowEditor(rows, def, title) {
       <button class="btn block" id="ed-cancel">취소</button>
     </div>`, (el, close) => {
     const box = el.querySelector("#ed");
-    const draw = () => {
-      box.innerHTML = list.map((r, i) => `<div class="ed-row ${r.name.trim() ? "" : "bad"}" data-i="${i}">
+    const draw = moved => {
+      box.innerHTML = list.map((r, i) => `<div class="ed-row ${r.name.trim() ? "" : "bad"}${i === moved ? " moved" : ""}" data-i="${i}">
         <input inputmode="numeric" data-k="grade" value="${esc(r.grade)}" aria-label="학년">
         <input data-k="cls" value="${esc(r.cls)}" aria-label="반">
         <input inputmode="numeric" data-k="no" value="${esc(r.no)}" aria-label="번호">
         <input data-k="name" value="${esc(r.name)}" placeholder="이름 필요" aria-label="이름">
+        <span class="ed-mv"><button data-up="${i}" ${i === 0 ? "disabled" : ""} aria-label="위로">▲</button><button data-down="${i}" ${i === list.length - 1 ? "disabled" : ""} aria-label="아래로">▼</button></span>
         <button class="ed-x" data-x="${i}" aria-label="줄 지우기">✕</button></div>`).join("");
     };
     draw();
@@ -1211,8 +1218,16 @@ function openRowEditor(rows, def, title) {
       if (e.target.dataset.k === "name") row.classList.toggle("bad", !e.target.value.trim());
     });
     box.addEventListener("click", e => {
-      const x = e.target.closest("[data-x]"); if (!x) return;
-      list.splice(+x.dataset.x, 1); draw();
+      const x = e.target.closest("[data-x]");
+      if (x) { list.splice(+x.dataset.x, 1); return draw(); }
+      // 위아래로 옮기기: 번호는 자리에 그대로 두고 학생(학년·반·이름)만 옮김
+      const mv = e.target.closest("[data-up],[data-down]"); if (!mv) return;
+      const i = +(mv.dataset.up ?? mv.dataset.down), j = mv.dataset.up != null ? i - 1 : i + 1;
+      if (j < 0 || j >= list.length) return;
+      const a = list[i], b = list[j];
+      [a.no, b.no] = [b.no, a.no];
+      list[i] = b; list[j] = a;
+      draw(j);
     });
     el.querySelector("#ed-add").onclick = () => {
       const last = list[list.length - 1] || {};
@@ -1308,7 +1323,7 @@ function buildWorkbook(classes) {
     const studs = [...cls.students].sort(byNo);
     const aoa = [
       [`${cls.name} 출석부`],
-      [`내보낸 시각 ${stamp}  ·  O = 출석, X = 결석, 위탁·수능 준비반 등 = 출석 제외, - = 그때 명단에 없음`],
+      [`내보낸 시각 ${stamp}  ·  O = 출석, X = 결석, 위탁·수능 준비반·숙려제 등 = 출석 제외, - = 그때 명단에 없음`],
       [],
       ["번호", "이름", ...ses.map(s => colDT(s.dt)), "출석 수", "결석 수"]
     ];
