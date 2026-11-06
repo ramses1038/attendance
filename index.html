@@ -90,6 +90,17 @@ button { cursor: pointer; }
 /* 머리줄 오른쪽 버튼: 아이콘 위, 글자 아래로 좁게 */
 .bar .icon-btn.lbl { flex-direction: column; gap: 1px; height: 52px; min-width: 52px; padding: 0 4px; font-size: 12px; font-weight: 600; flex: none; white-space: nowrap; }
 .bar .icon-btn.lbl svg { width: 22px; height: 22px; }
+.drive-btn { height: auto !important; min-height: 52px; padding-block: 4px !important; }
+.drive-btn .ic { position: relative; display: flex; }
+.st-dot { position: absolute; right: -4px; top: -2px; width: 10px; height: 10px; border-radius: 50%; background: var(--muted); border: 2px solid var(--bg); }
+.st-dot.ok { background: #3E8E5A; }
+.st-dot.wait { background: #D89A2B; }
+.st-dot.busy { background: var(--accent); animation: pulse 1s ease-in-out infinite; }
+.st-text { font-size: 11px; font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; line-height: 1.2; }
+.st-text.ok { color: #3E8E5A; }
+.st-text.wait { color: #B07A16; }
+@keyframes pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .st-dot.busy { animation: none; } }
 .bar .sub { color: var(--muted); font-size: 13px; white-space: nowrap; }
 .icon-btn {
   border: 0; background: transparent; border-radius: 10px;
@@ -493,7 +504,7 @@ function renderHome() {
     <div class="sync-line" id="sync-line"></div>`;
   }
   app.innerHTML = `
-    <header class="bar"><div class="wrap"><h1>수업 출석부</h1><span class="sub">${today}</span><button class="icon-btn lbl" data-act="settings" aria-label="구글 드라이브 백업">${ICON.drive}구글 드라이브</button></div></header>
+    <header class="bar"><div class="wrap"><h1>수업 출석부</h1><span class="sub">${today}</span><button class="icon-btn lbl drive-btn" data-act="settings" aria-label="구글 드라이브 백업"><span class="ic">${ICON.drive}<i class="st-dot" id="st-dot"></i></span>구글 드라이브<span class="st-text" id="st-text"></span></button></div></header>
     <main class="wrap">
       <button class="term-chip" data-act="term">${termLabel(S.term)}${ICON.down}</button>
       ${body}
@@ -1644,7 +1655,24 @@ function onDataChanged() {
   if (restoring || !driveConfigured() || !dprefs.connected) return;
   dprefs.pending = true; savePrefs(); syncDrive(true);
 }
+// 홈 오른쪽 위: 아이콘 점 색 + 짧은 상태 글자
+function backupState() {
+  if (!driveConfigured() || !dprefs.connected) return ["off", "연결 안 됨"];
+  if (syncing) return ["busy", "백업 중"];
+  if (dprefs.pending) return ["wait", dprefs.lastError === "auth" ? "확인 필요" : "백업 대기"];
+  if (!dprefs.lastSync) return ["wait", "백업 대기"];
+  const t = dprefs.lastSync;
+  return ["ok", t.slice(0, 10) === todayStr() ? `${t.slice(11, 16)} 백업됨` : `${+t.slice(5, 7)}/${+t.slice(8, 10)} 백업됨`];
+}
+function updateBadge() {
+  const dot = document.getElementById("st-dot"), txt = document.getElementById("st-text");
+  if (!dot) return;
+  const [k, label] = backupState();
+  dot.className = "st-dot " + k; txt.textContent = label; txt.className = "st-text " + k;
+  dot.parentElement.parentElement.setAttribute("aria-label", `구글 드라이브 백업: ${label}`);
+}
 function updateSyncLine() {
+  updateBadge();
   const el = document.getElementById("sync-line");
   if (!el) return;
   if (!driveConfigured() || !dprefs.connected) { el.innerHTML = ""; return; }
@@ -1653,7 +1681,7 @@ function updateSyncLine() {
     el.innerHTML = `<span>${dprefs.lastError === "net" ? "인터넷이 연결되면 백업할게요" : "드라이브 백업을 기다리는 중이에요"}</span><button class="btn" data-act="sync-now">지금 백업</button>`;
     return;
   }
-  el.innerHTML = dprefs.lastSync ? `<span>드라이브 백업 · ${prettyDT(dprefs.lastSync)}</span>` : "";
+  el.innerHTML = ""; // 백업 완료 상태는 오른쪽 위에 보여 줌
 }
 function driveError(e) {
   if (e.message === "gis_not_loaded") toast("구글 로그인 도구를 불러오지 못했어요. 인터넷 연결을 확인해 주세요.");
