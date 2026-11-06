@@ -282,6 +282,11 @@ main.wrap { padding-block: 16px 140px; display: flex; flex-direction: column; ga
   font-size: 14px; max-width: calc(100% - 32px); box-shadow: var(--shadow);
   pointer-events: none;
 }
+.toast.act { pointer-events: auto; display: flex; align-items: center; gap: 12px; width: max-content; }
+.toast.act button { border: 0; background: transparent; color: var(--accent-soft); font-weight: 700; font-size: 14px; min-height: 36px; padding: 0 4px; text-decoration: underline; text-underline-offset: 3px; }
+.tile { -webkit-touch-callout: none; }
+.tile.hold { transform: scale(.96); transition: transform .25s; }
+.hold-hint { font-size: 13px; color: var(--muted); }
 .set { display: flex; flex-direction: column; gap: 8px; }
 .set-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .set select { flex: 1; min-width: 0; min-height: 44px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 10px; padding: 0 8px; }
@@ -313,6 +318,11 @@ main.wrap { padding-block: 16px 140px; display: flex; flex-direction: column; ga
 .field.no-f { width: 84px; flex: none; }
 .field.grow { flex: 1; min-width: 0; }
 .seg4 { grid-template-columns: 1fr 1fr; }
+.seg-menu { grid-template-columns: 1fr 1fr; }
+.seg-menu button { min-height: 56px; font-size: 17px; }
+.seg-menu button.back { grid-column: 1 / -1; color: var(--accent); }
+.seg-menu button.back:only-child, .seg-menu button.back { background: var(--surface); }
+#sm-why { flex: 1; min-width: 0; min-height: 46px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 10px; padding: 0 10px; font-size: 16px; }
 .seg4 button:last-child { grid-column: 1 / -1; }
 .fmt { border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; align-self: flex-start; }
 .fmt th, .fmt td { border: 1px solid var(--line); padding: 4px 12px; text-align: center; }
@@ -436,8 +446,22 @@ const ICON = {
 let toastTimer;
 function toast(msg) {
   const t = document.getElementById("toast");
-  t.textContent = msg; t.hidden = false;
+  t.textContent = msg; t.hidden = false; t.classList.remove("act");
   clearTimeout(toastTimer); toastTimer = setTimeout(() => (t.hidden = true), 2600);
+}
+// 받침에 맞는 '로/으로'
+function ro(w) {
+  const c = String(w).trim().slice(-1).charCodeAt(0) - 0xAC00;
+  if (c < 0 || c > 11171) return "(으)로";
+  const jong = c % 28;
+  return jong === 0 || jong === 8 ? "로" : "으로";
+}
+function toastUndo(msg, undo) {
+  const t = document.getElementById("toast");
+  t.innerHTML = `<span>${esc(msg)}</span><button type="button">되돌리기</button>`;
+  t.hidden = false; t.classList.add("act");
+  t.querySelector("button").onclick = () => { t.hidden = true; undo(); };
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => (t.hidden = true), 6000);
 }
 function sheet(html, mount) {
   const scrim = document.createElement("div");
@@ -649,6 +673,7 @@ function renderClass() {
 
       <div class="filter-note" id="filter-note"></div>
       <div class="grid" id="grid"></div>
+      <p class="hold-hint">학생 이름을 <b>꾹 누르면</b> 위탁·수능 준비반·숙려제 등 상태를 바로 바꿀 수 있어요.</p>
       ${offList.length ? `<p class="excluded">출석을 부르지 않는 학생 ${offList.length}명 · ${offList.map(s => `${s.no ?? ""} ${esc(s.name)} <b>${esc(offAt(s, d.dt))}</b>`).join(", ")}</p>` : ""}
 
       <label class="memo-field"><span class="label">오늘 진도 (선택)</span>
@@ -660,6 +685,7 @@ function renderClass() {
     </div></div>`;
 
   drawGrid();
+  bindHold(document.getElementById("grid"));
   document.getElementById("memo").oninput = e => { d.memo = e.target.value; S.dirty = true; };
   document.getElementById("sdate").onchange = e => {
     if (!e.target.value) return renderClass();
@@ -680,7 +706,7 @@ function drawGrid() {
   let list, tiles;
   if (f === "off") {
     list = offs;
-    tiles = list.map(s => `<div class="tile off-tile"><span class="no">${s.no ?? ""}</span><span class="mark offm">${esc(offAt(s, d.dt))}</span><span class="name">${esc(s.name)}</span></div>`).join("");
+    tiles = list.map(s => `<div class="tile off-tile" data-oid="${s.id}"><span class="no">${s.no ?? ""}</span><span class="mark offm">${esc(offAt(s, d.dt))}</span><span class="name">${esc(s.name)}</span></div>`).join("");
   } else {
     list = f === "present" ? call.filter(s => !d.absent.has(s.id)) : f === "absent" ? call.filter(s => d.absent.has(s.id)) : call;
     tiles = list.map(s => tileHTML(s, d.absent.has(s.id))).join("");
@@ -693,6 +719,69 @@ function drawGrid() {
 }
 const tileHTML = (s, absent) => `<button class="tile ${absent ? "absent" : ""}" data-sid="${s.id}" aria-pressed="${absent}">
   <span class="no">${s.no ?? ""}</span>${absent ? '<span class="mark">결석</span>' : ""}<span class="name">${esc(s.name)}</span></button>`;
+
+// 학생 칸 꾹 누르기 → 아래에서 상태 메뉴
+function bindHold(grid) {
+  let h = null;
+  const cancel = () => { if (h) { clearTimeout(h.timer); h.tile.classList.remove("hold"); h = null; } };
+  grid.addEventListener("pointerdown", e => {
+    const tile = e.target.closest("[data-sid],[data-oid]"); if (!tile) return;
+    S.held = false;
+    h = { tile, x: e.clientX, y: e.clientY };
+    tile.classList.add("hold");
+    h.timer = setTimeout(() => {
+      const id = tile.dataset.sid || tile.dataset.oid;
+      tile.classList.remove("hold"); h = null;
+      S.held = !!tile.dataset.sid; // 손을 뗄 때 결석으로 바뀌지 않게
+      buzz(40); openStatusMenu(id);
+    }, 450);
+  });
+  grid.addEventListener("pointermove", e => { if (h && Math.hypot(e.clientX - h.x, e.clientY - h.y) > 10) cancel(); });
+  ["pointerup", "pointercancel", "pointerleave"].forEach(ev => grid.addEventListener(ev, cancel));
+  grid.addEventListener("contextmenu", e => { if (e.target.closest(".tile")) e.preventDefault(); });
+}
+function openStatusMenu(sid) {
+  const cls = getClass(S.classId), d = S.draft;
+  const s = cls.students.find(x => x.id === sid); if (!s) return;
+  const cur = offNow(s);
+  const custom = cur && !REASONS.includes(cur);
+  sheet(`<h2>${s.no != null ? s.no + "번 " : ""}${esc(s.name)}</h2>
+    <p>지금 상태: <b>${cur ? esc(cur) + " (출석 제외)" : "출석 부름"}</b></p>
+    <div class="seg seg-menu" role="group" aria-label="상태 바꾸기">
+      ${REASONS.map(r => `<button data-st="${r}" class="${cur === r ? "on" : ""}">${r}</button>`).join("")}
+      <button data-st="기타" class="${custom ? "on" : ""}">기타 사유</button>
+      ${cur ? `<button data-st="" class="back">복귀함</button>` : ""}
+    </div>
+    <label class="field" id="sm-why-f" hidden><span class="label">기타 사유</span>
+      <span class="set-row"><input id="sm-why" type="text" maxlength="10" placeholder="예: 장기 입원" value="${custom ? esc(cur) : ""}"><button class="btn primary" id="sm-why-go">적용</button></span></label>
+    <p class="help">출석 제외는 지금부터 이후 수업에 계속 적용돼요. 다시 수업에 들어오면 <b>복귀함</b>을 눌러 주세요.</p>
+    <div class="acts">
+      <button class="btn block" id="sm-edit">${ICON.people}번호·이름 고치기</button>
+      <button class="btn block" id="sm-x">닫기</button>
+    </div>`, (el, close) => {
+    const apply = reason => {
+      if ((cur || null) === (reason || null)) return close();
+      const before = JSON.parse(JSON.stringify(s.off || [])), wasAbsent = d.absent.has(s.id);
+      setOff(s, reason, cls);
+      if (reason) d.absent.delete(s.id);
+      persist(); close(); renderClass();
+      toastUndo(reason ? `${s.name} 학생을 ${reason}${ro(reason)} 바꿨어요` : `${s.name} 학생이 복귀했어요`, () => {
+        s.off = before; if (wasAbsent) d.absent.add(s.id);
+        persist(); if (S.view === "class") renderClass(); toast("되돌렸어요");
+      });
+    };
+    el.querySelectorAll("[data-st]").forEach(b => b.onclick = () => {
+      if (b.dataset.st === "기타") {
+        el.querySelectorAll("[data-st]").forEach(x => x.classList.toggle("on", x === b));
+        el.querySelector("#sm-why-f").hidden = false; el.querySelector("#sm-why").focus(); return;
+      }
+      apply(b.dataset.st || null);
+    });
+    el.querySelector("#sm-why-go").onclick = () => apply(el.querySelector("#sm-why").value.trim() || "기타");
+    el.querySelector("#sm-edit").onclick = () => { close(); openRoster(); openStudent(sid); };
+    el.querySelector("#sm-x").onclick = close;
+  });
+}
 
 function toggle(sid) {
   const d = S.draft;
@@ -917,12 +1006,12 @@ function moveStudent(cls, s, others) {
     el.querySelector("#mv-cancel").onclick = close;
     el.querySelectorAll("[data-to]").forEach(b => b.onclick = () => {
       const to = getClass(b.dataset.to), t = effT(cls), r = offNow(s);
-      s.leftAt = t; s.leftNote = `${to.name}(으)로 이동`;
+      s.leftAt = t; s.leftNote = `${to.name}${ro(to.name)} 이동`;
       if (S.draft) S.draft.absent.delete(s.id);
       to.students.push({ id: uid(), no: nextNo(to), name: s.name, addedAt: nowDT(), leftAt: null,
         off: r ? [{ from: nowDT(), to: null, reason: r }] : [] });
       persist(); close(); renderRoster();
-      toast(`${s.name} 학생을 ${to.name}(으)로 옮겼어요. 번호는 그 반 명단에서 고칠 수 있어요`);
+      toast(`${s.name} 학생을 ${to.name}${ro(to.name)} 옮겼어요. 번호는 그 반 명단에서 고칠 수 있어요`);
     });
   });
 }
@@ -1779,7 +1868,7 @@ function loadDemo() {
 app.addEventListener("click", e => {
   const t = e.target.closest("button");
   if (!t) return;
-  if (t.dataset.sid) return toggle(t.dataset.sid);
+  if (t.dataset.sid) { if (S.held) { S.held = false; return; } return toggle(t.dataset.sid); }
   if (t.dataset.open) return openClass(t.dataset.open);
   if (t.dataset.stu) return openStudent(t.dataset.stu);
   if (t.dataset.per) return changeSlot(S.draft.date, +t.dataset.per);
