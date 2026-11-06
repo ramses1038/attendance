@@ -1220,13 +1220,11 @@ function openRowEditor(rows, def, title) {
     box.addEventListener("click", e => {
       const x = e.target.closest("[data-x]");
       if (x) { list.splice(+x.dataset.x, 1); return draw(); }
-      // 위아래로 옮기기: 번호는 자리에 그대로 두고 학생(학년·반·이름)만 옮김
+      // 위아래로 옮기기: 번호까지 줄 전체를 함께 옮김
       const mv = e.target.closest("[data-up],[data-down]"); if (!mv) return;
       const i = +(mv.dataset.up ?? mv.dataset.down), j = mv.dataset.up != null ? i - 1 : i + 1;
       if (j < 0 || j >= list.length) return;
-      const a = list[i], b = list[j];
-      [a.no, b.no] = [b.no, a.no];
-      list[i] = b; list[j] = a;
+      [list[i], list[j]] = [list[j], list[i]];
       draw(j);
     });
     el.querySelector("#ed-add").onclick = () => {
