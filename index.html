@@ -325,8 +325,6 @@ main.wrap { padding-block: 16px 140px; display: flex; flex-direction: column; ga
 .ed-row.bad input[data-k=name]::placeholder { color: var(--absent-ink); }
 .ed-x { border: 0; background: transparent; color: var(--muted); min-height: 42px; font-size: 16px; }
 .ed-warn { background: var(--absent-bg); color: var(--absent-ink); border-radius: 10px; padding: 10px 12px; font-weight: 600; font-size: 14px; }
-.ocr-bar { height: 8px; border-radius: 4px; background: var(--bg); overflow: hidden; }
-.ocr-bar span { display: block; height: 100%; width: 3%; background: var(--accent); transition: width .2s; }
 .term-chip { align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 999px; min-height: 40px; padding: 0 12px 0 14px; font-weight: 600; font-size: 15px; }
 .term-chip svg { width: 18px; height: 18px; color: var(--muted); }
 .list-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -342,7 +340,6 @@ main.wrap { padding-block: 16px 140px; display: flex; flex-direction: column; ga
 </head>
 <body>
 <div id="app"></div>
-<input type="file" id="photo" accept="image/*" hidden>
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script>
@@ -473,7 +470,7 @@ function renderHome() {
   if (!classes.length) {
     body = `<div class="empty">
       <h2>${termLabel(S.term)}에 아직 반이 없어요</h2>
-      <p><b>학년, 반, 번호, 이름</b> 순서의 표를 구글 드라이브에서 고르거나, 명렬표 스크린샷을 고르거나, 직접 입력하면 반이 만들어져요. 학년과 반이 있으면 여러 반을 한 번에 만들어요.</p>
+      <p><b>학년, 반, 번호, 이름</b> 순서의 명렬표를 구글 드라이브에서 불러오거나 직접 입력하면 반이 만들어져요. 학년과 반이 있으면 여러 반을 한 번에 만들어요.</p>
       <div class="btns">
         <button class="btn primary" data-act="import">${ICON.upload}명단 올리기</button>
         ${db.classes.length ? "" : `<button class="btn" data-act="demo">예시 반으로 둘러보기</button>`}
@@ -1047,7 +1044,7 @@ const NO_H = /^(번호|번|출석번호|no\.?)$/i;
 const CLS_H = /^(반|학급|분반|학반|반명|수업반|선택반|반이름)$/;
 const GRADE_H = /^(학년)$/;
 const ID_H = /^학번$/;
-const FORMAT_HTML = `<table class="fmt"><tr><th>학년</th><th>반</th><th>번호</th><th>이름</th></tr><tr><td>3</td><td>2</td><td>1</td><td>김민성</td></tr><tr><td>3</td><td>A</td><td>2</td><td>노수진</td></tr></table>
+const FORMAT_HTML = `<table class="fmt"><tr><th>학년</th><th>반</th><th>번호</th><th>이름</th></tr><tr><td>3</td><td>2</td><td>1</td><td>홍길동</td></tr><tr><td>3</td><td>2</td><td>2</td><td>이순신</td></tr><tr><td>3</td><td>A</td><td>1</td><td>안창호</td></tr></table>
   <p class="help">첫 줄에 <b>학년, 반, 번호, 이름</b> 제목을 넣은 표가 가장 정확해요. 학년·반·번호는 없으면 빼도 되지만 <b>이름은 꼭 있어야</b> 해요. 반에는 숫자뿐 아니라 <b>A, B, 가, 나</b> 같은 선택반 이름도 쓸 수 있고, '3학년 2반', '3학년 A반'처럼 반이 자동으로 나뉘어요.</p>`;
 const digits = v => { const m = String(v ?? "").match(/\d+/); return m ? parseInt(m[0], 10) : null; };
 const cellText = v => String(v ?? "").trim();
@@ -1149,7 +1146,7 @@ function fileKind(buf) {
 }
 function handleBuffer(buf, fileName) {
   const kind = fileKind(buf);
-  if (kind === "image") return runOcr(new Blob([buf]));
+  if (kind === "image") return ask({ title: "이미지는 불러올 수 없어요", body: "학년·반·번호·이름 표가 들어 있는 <b>엑셀 파일이나 구글 스프레드시트</b>를 골라 주세요.", actions: [{ label: "확인", cls: "primary" }] });
   if (!window.XLSX) { toast("엑셀 도구를 불러오지 못했어요. 인터넷 연결을 확인해 주세요."); return; }
   if (kind === "pdf") return ask({ title: "엑셀이 아니라 PDF로 받아졌어요", body: "구글 시트 파일을 휴대폰 파일 선택 창에서 고르면 PDF로 넘어올 수 있어요. 구글 시트 원본이나 엑셀(.xlsx) 파일을 다시 골라 주세요.", actions: [{ label: "확인", cls: "primary" }] });
   let rows;
@@ -1237,146 +1234,6 @@ function openRowEditor(rows, def, title) {
     };
   });
 }
-
-/* ---------- 명단 사진 인식 (폰 안에서 처리) ---------- */
-function loadScript(src) {
-  return new Promise((res, rej) => { const s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = rej; document.head.appendChild(s); });
-}
-let ocrWorker = null;
-async function getOcr(onProgress) {
-  if (!window.Tesseract) await loadScript("https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js");
-  if (!ocrWorker) {
-    ocrWorker = await Tesseract.createWorker(["kor", "eng"], 1, { logger: m => onProgress && onProgress(m) });
-    await ocrWorker.setParameters({ tessedit_pageseg_mode: "4", preserve_interword_spaces: "1" });
-  }
-  return ocrWorker;
-}
-// 크기를 맞추고 흑백·대비를 높여 글자를 잘 보이게
-async function prepImage(blob) {
-  const url = URL.createObjectURL(blob);
-  try {
-    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
-    const scale = Math.min(2, 2000 / Math.max(img.width, img.height));
-    const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
-    const c = document.createElement("canvas"); c.width = w; c.height = h;
-    const g = c.getContext("2d"); g.drawImage(img, 0, 0, w, h);
-    const d = g.getImageData(0, 0, w, h), p = d.data;
-    let lo = 255, hi = 0;
-    for (let i = 0; i < p.length; i += 16) { const v = p[i] * .3 + p[i + 1] * .59 + p[i + 2] * .11; if (v < lo) lo = v; if (v > hi) hi = v; }
-    if (hi - lo < 40) { lo = 0; hi = 255; } // 대비가 거의 없으면 늘리지 않음
-    const span = hi - lo;
-    for (let i = 0; i < p.length; i += 4) {
-      let v = (p[i] * .3 + p[i + 1] * .59 + p[i + 2] * .11 - lo) * 255 / span;
-      v = v < 0 ? 0 : v > 255 ? 255 : v;
-      p[i] = p[i + 1] = p[i + 2] = v;
-    }
-    g.putImageData(d, 0, 0);
-    return c;
-  } finally { URL.revokeObjectURL(url); }
-}
-const NOT_NAME = /^(학년|번호|이름|성명|명단|출석부|학생|비고|합계)$/;
-// 사진 글자 → 줄 목록. 반은 숫자(3)뿐 아니라 글자(A, 가, C반)도 받음
-const CLS_TOKEN = /^([A-Za-z]{1,2}|[가-힣]|[0-9A-Za-z가-힣]{1,3}반)$/;
-function parseOcrText(text) {
-  const rows = []; let cols = null, afterHeader = false;
-  text.split("\n").forEach((raw, i) => {
-    const line = raw.trim(); if (!line) return;
-    const compact = line.replace(/\s+/g, "");
-    if (/(이름|성명)/.test(compact) && (/(학년|번호)/.test(compact) || /반/.test(compact.replace(/학년/g, "")))) {
-      cols = [];
-      if (/학년/.test(compact)) cols.push("grade");
-      if (/반/.test(compact.replace(/학년/g, ""))) cols.push("cls");
-      if (/번호|번/.test(compact.replace(/반/g, ""))) cols.push("no");
-      afterHeader = true; return;
-    }
-    const names = (line.match(/[가-힣]{2,5}/g) || []).filter(n => !NOT_NAME.test(n) && !/반$/.test(n));
-    const name = names.length ? names[names.length - 1] : "";
-    const before = name ? line.slice(0, line.lastIndexOf(name)) : line;
-    const toks = before.split(/[\s|ㅣ。.,:;]+/).filter(t => /^\d+$/.test(t) || CLS_TOKEN.test(t));
-    if (!name && !(afterHeader && toks.length)) return;
-    if (!name && !toks.length) return;
-    const row = { grade: null, cls: "", no: null, name, line: i + 1 };
-    if (cols && cols.length) {
-      toks.slice(-cols.length).forEach((t, k) => {
-        const key = cols[cols.length - Math.min(cols.length, toks.length) + k];
-        if (key === "cls") row.cls = t.replace(/반$/, "");
-        else if (/^\d+$/.test(t)) row[key] = Number(t);
-      });
-    } else {
-      const ci = toks.findIndex(t => !/^\d+$/.test(t));
-      if (ci >= 0) {
-        row.cls = toks[ci].replace(/반$/, "");
-        const pre = toks.slice(0, ci), post = toks.slice(ci + 1);
-        if (pre.length) row.grade = Number(pre[pre.length - 1]);
-        if (post.length) row.no = Number(post[0]);
-      } else {
-        Object.assign(row, numsToRow(toks.map(Number), name, i + 1));
-      }
-    }
-    rows.push(row);
-  });
-  return rows;
-}
-// 제목 줄(학년·반·번호·이름)의 가로 위치로 칸을 나눠 읽음 — 빈 칸이 있어도 칸이 밀리지 않음
-function parseOcrLayout(data) {
-  const lines = (data && data.lines) || [];
-  const cx = w => (w.bbox.x0 + w.bbox.x1) / 2;
-  let col = null, hi = -1;
-  for (let i = 0; i < lines.length && i < 8; i++) {
-    const c = {};
-    lines[i].words.forEach(w => {
-      const t = w.text.replace(/\s+/g, "");
-      if (/학년/.test(t)) c.grade = cx(w);
-      else if (/번호|^번$/.test(t)) c.no = cx(w);
-      else if (/이름|성명/.test(t)) c.name = cx(w);
-      else if (/반/.test(t)) c.cls = cx(w);
-    });
-    if (c.name != null && Object.keys(c).length >= 2) { col = c; hi = i; break; }
-  }
-  if (!col) return null;
-  const keys = Object.keys(col);
-  const nearest = x => keys.reduce((b, k) => Math.abs(col[k] - x) < Math.abs(col[b] - x) ? k : b, keys[0]);
-  const rows = [];
-  lines.slice(hi + 1).forEach((ln, i) => {
-    const cell = {};
-    ln.words.forEach(w => { const t = w.text.trim(); if (!t) return; const k = nearest(cx(w)); cell[k] = (cell[k] || "") + t; });
-    const name = (cell.name || "").replace(/[^가-힣A-Za-z]/g, "");
-    let cls = (cell.cls || "").replace(/[|ㅣ。.,:;]/g, "").replace(/\^/g, "A").replace(/반$/, "");
-    const grade = digits(cell.grade), no = digits(cell.no);
-    if (!name && grade == null && !cls && no == null) return;
-    if (NOT_NAME.test(name)) return;
-    rows.push({ grade, cls, no, name, line: hi + i + 2 });
-  });
-  return rows;
-}
-async function runOcr(blob) {
-  let closeWait;
-  const setMsg = t => { const m = document.getElementById("ocr-msg"); if (m) m.textContent = t; };
-  sheet(`<h2>명렬표 스크린샷을 읽는 중이에요</h2>
-    <p id="ocr-msg">글자 인식 도구를 준비하고 있어요. 처음 한 번은 1분쯤 걸릴 수 있어요.</p>
-    <div class="ocr-bar"><span id="ocr-bar"></span></div>
-    <p class="help">스크린샷은 이 폰 안에서만 처리되고 밖으로 보내지 않아요.</p>`, (el, close) => { closeWait = close; });
-  const bar = p => { const b = document.getElementById("ocr-bar"); if (b) b.style.width = Math.round(p * 100) + "%"; };
-  try {
-    const canvas = await prepImage(blob);
-    const w = await getOcr(m => {
-      if (m.status === "recognizing text") { setMsg("글자를 읽고 있어요"); bar(.3 + m.progress * .7); }
-      else if (/load|initializ/.test(m.status)) { setMsg("글자 인식 도구를 준비하고 있어요"); bar((m.progress || 0) * .3); }
-    });
-    const { data } = await w.recognize(canvas);
-    closeWait();
-    const rows = parseOcrLayout(data) || parseOcrText(data.text || "");
-    if (!rows.length) {
-      return ask({ title: "명단을 읽지 못했어요", body: `스크린샷에서 학생 이름을 찾지 못했어요. 명렬표의 <b>학년·반·번호·이름 제목 줄</b>까지 함께 나오게 캡처해 주세요. 표만 화면에 크게 나오게 캡처하면 더 잘 읽혀요. 모니터를 폰 카메라로 찍은 사진은 잘 읽히지 않아요.${FORMAT_HTML}`,
-        actions: [{ label: "다른 스크린샷 고르기", cls: "primary", fn: pickPhoto }, { label: "표에 직접 입력하기", fn: () => openRowEditor([], "새 반", "명단 직접 입력") }, { label: "닫기" }] });
-    }
-    openRowEditor(rows, "새 반", `스크린샷에서 ${rows.length}명을 읽었어요`);
-  } catch (e) {
-    if (closeWait) closeWait();
-    ask({ title: "스크린샷을 읽지 못했어요", body: "처음 사용할 때는 글자 인식 도구를 내려받아야 해서 인터넷 연결이 필요해요. 연결을 확인하고 다시 해 주세요.", actions: [{ label: "확인", cls: "primary" }] });
-  }
-}
-function pickPhoto() { document.getElementById("photo").click(); }
 
 function showImportPreview(groups) {
   sheet(`<h2>명단 ${groups.length}개 반을 찾았어요</h2>
@@ -1785,17 +1642,15 @@ async function pickFromDrive() {
 function openImportChoice() {
   const drive = driveConfigured() && DRIVE.apiKey;
   sheet(`<h2>명단 올리기</h2>
-    <p>아래 양식의 명렬표 엑셀 파일(또는 구글 스프레드시트)을 구글 드라이브에서 불러오거나, 명렬표를 캡처한 <b>스크린샷</b>을 갤러리에서 골라 주세요.</p>
+    <p>아래 양식의 명렬표 엑셀 파일(또는 구글 스프레드시트)을 구글 드라이브에서 불러와 주세요.</p>
     ${FORMAT_HTML}
     <div class="acts">
       ${drive ? `<button class="btn primary block" id="im-drive">${ICON.drive}구글 드라이브에서 불러오기</button>` : ""}
-      <button class="btn ${drive ? "" : "primary"} block" id="im-photo">${ICON.image}갤러리에서 명렬표 스크린샷 고르기</button>
-      <button class="btn block" id="im-type">표에 직접 입력하기</button>
+      <button class="btn ${drive ? "" : "primary"} block" id="im-type">표에 직접 입력하기</button>
       <button class="btn block" id="im-cancel">취소</button>
     </div>`, (el, close) => {
     const on = (id, fn) => { const b = el.querySelector(id); if (b) b.onclick = () => { close(); fn(); }; };
     on("#im-drive", pickFromDrive);
-    on("#im-photo", pickPhoto);
     on("#im-type", () => openRowEditor([{ grade: "", cls: "", no: 1, name: "" }], "새 반", "명단 직접 입력"));
     on("#im-cancel", () => {});
   });
@@ -1934,10 +1789,7 @@ function startTerm() {
 }
 S.term = startTerm();
 
-document.getElementById("photo").addEventListener("change", e => {
-  const f = e.target.files[0]; e.target.value = "";
-  if (f) runOcr(f);
-});
+
 
 render();
 setTimeout(() => { if (dprefs.connected && dprefs.pending) syncDrive(false); }, 1500);
