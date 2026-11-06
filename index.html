@@ -318,9 +318,12 @@ main.wrap { padding-block: 16px 140px; display: flex; flex-direction: column; ga
 .fmt th, .fmt td { border: 1px solid var(--line); padding: 4px 12px; text-align: center; }
 .fmt th { background: var(--accent-soft); font-weight: 600; }
 .ed-head, .ed-row { display: grid; grid-template-columns: 40px 44px 44px minmax(0, 1fr) 30px 28px; gap: 4px; align-items: center; }
-.ed-mv { display: flex; flex-direction: column; gap: 2px; }
-.ed-mv button { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 6px; height: 20px; padding: 0; font-size: 10px; line-height: 1; }
-.ed-mv button:disabled { opacity: .3; }
+.ed-row { transition: transform .15s ease; border-radius: 10px; }
+.ed-grip { touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; height: 42px; display: flex; align-items: center; justify-content: center; color: var(--muted); border-radius: 8px; cursor: grab; }
+.ed-grip svg { width: 20px; height: 20px; }
+.ed-grip.press { background: var(--accent-soft); color: var(--accent); }
+.ed-row.dragging { transition: none; position: relative; z-index: 3; background: var(--surface); box-shadow: 0 6px 20px rgba(24,38,58,.22); }
+.ed-row.dragging .ed-grip { color: var(--accent); cursor: grabbing; }
 .ed-row.moved input { background: var(--accent-soft); transition: background .6s; }
 .ed-head span { font-size: 12px; color: var(--muted); font-weight: 600; text-align: center; }
 .ed { display: flex; flex-direction: column; gap: 4px; }
@@ -425,6 +428,7 @@ const ICON = {
   camera: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',
   image: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-9 9"/></svg>',
   down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>',
+  grip: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>',
   voice: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>'
 };
 
@@ -1192,8 +1196,8 @@ function groupByDef(rows) {
 function openRowEditor(rows, def, title) {
   let list = rows.map(r => ({ grade: r.grade ?? "", cls: r.cls ?? "", no: r.no ?? "", name: r.name || "", def: r.def || def }));
   sheet(`<h2>${esc(title)}</h2>
-    <p class="help">틀린 글자는 눌러서 고치고, ▲▼로 순서를 바꾸고, 필요 없는 줄은 ✕로 지워 주세요. 학년·반·번호는 비워 둬도 되지만 이름은 꼭 넣어야 해요.</p>
-    <div class="ed-head"><span>학년</span><span>반</span><span>번호</span><span>이름</span><span>순서</span><span></span></div>
+    <p class="help">틀린 글자는 눌러서 고치고, 오른쪽 ⠿를 <b>꾹 누른 채 끌어서</b> 순서를 바꾸고, 필요 없는 줄은 ✕로 지워 주세요. 학년·반·번호는 비워 둬도 되지만 이름은 꼭 넣어야 해요.</p>
+    <div class="ed-head"><span>학년</span><span>반</span><span>번호</span><span>이름</span><span></span><span></span></div>
     <div class="ed" id="ed"></div>
     <button class="btn block" id="ed-add">+ 줄 추가</button>
     <div class="ed-warn" id="ed-warn" hidden></div>
@@ -1208,7 +1212,7 @@ function openRowEditor(rows, def, title) {
         <input data-k="cls" value="${esc(r.cls)}" aria-label="반">
         <input inputmode="numeric" data-k="no" value="${esc(r.no)}" aria-label="번호">
         <input data-k="name" value="${esc(r.name)}" placeholder="이름 필요" aria-label="이름">
-        <span class="ed-mv"><button data-up="${i}" ${i === 0 ? "disabled" : ""} aria-label="위로">▲</button><button data-down="${i}" ${i === list.length - 1 ? "disabled" : ""} aria-label="아래로">▼</button></span>
+        <span class="ed-grip" aria-label="꾹 눌러서 옮기기">${ICON.grip}</span>
         <button class="ed-x" data-x="${i}" aria-label="줄 지우기">✕</button></div>`).join("");
     };
     draw();
@@ -1220,13 +1224,68 @@ function openRowEditor(rows, def, title) {
     box.addEventListener("click", e => {
       const x = e.target.closest("[data-x]");
       if (x) { list.splice(+x.dataset.x, 1); return draw(); }
-      // 위아래로 옮기기: 번호까지 줄 전체를 함께 옮김
-      const mv = e.target.closest("[data-up],[data-down]"); if (!mv) return;
-      const i = +(mv.dataset.up ?? mv.dataset.down), j = mv.dataset.up != null ? i - 1 : i + 1;
-      if (j < 0 || j >= list.length) return;
-      [list[i], list[j]] = [list[j], list[i]];
-      draw(j);
     });
+    // 꾹 눌러서 집고 끌어다 놓기 (번호까지 줄 전체가 함께 옮겨짐)
+    let drag = null, raf = 0;
+    const sc = el; // 시트가 스크롤됨
+    const step = () => { const r = box.children; return r.length > 1 ? r[1].getBoundingClientRect().top - r[0].getBoundingClientRect().top : 46; };
+    function lift(d) {
+      d.on = true; buzz(25);
+      d.grip.classList.remove("press");
+      d.rows = [...box.children];
+      d.mid = d.rows.map(r => { const b = r.getBoundingClientRect(); return b.top + b.height / 2; });
+      d.step = step(); d.sc0 = sc.scrollTop; d.to = d.i;
+      d.row.classList.add("dragging");
+    }
+    function update() {
+      const d = drag; if (!d || !d.on) return;
+      const dy = d.y - d.y0 + (sc.scrollTop - d.sc0);
+      d.row.style.transform = `translateY(${dy}px)`;
+      const c = d.mid[d.i] + dy;
+      let to = 0;
+      d.mid.forEach((m, j) => { if (j !== d.i && m < c) to++; });
+      d.to = to;
+      d.rows.forEach((r, j) => {
+        if (j === d.i) return;
+        const sh = d.i < to && j > d.i && j <= to ? -d.step : d.i > to && j >= to && j < d.i ? d.step : 0;
+        r.style.transform = sh ? `translateY(${sh}px)` : "";
+      });
+    }
+    function autoScroll() {
+      raf = 0; const d = drag; if (!d || !d.on) return;
+      const b = sc.getBoundingClientRect(); let v = 0;
+      if (d.y < b.top + 70) v = -Math.ceil((b.top + 70 - d.y) / 6);
+      else if (d.y > b.bottom - 70) v = Math.ceil((d.y - (b.bottom - 70)) / 6);
+      if (v) { sc.scrollTop += v; update(); raf = requestAnimationFrame(autoScroll); }
+    }
+    function end(cancel) {
+      const d = drag; drag = null; if (!d) return;
+      clearTimeout(d.timer); d.grip.classList.remove("press");
+      if (!d.on) return;
+      if (raf) cancelAnimationFrame(raf), raf = 0;
+      const to = cancel ? d.i : d.to;
+      const [item] = list.splice(d.i, 1); list.splice(to, 0, item);
+      draw(to === d.i ? -1 : to);
+    }
+    box.addEventListener("pointerdown", e => {
+      const grip = e.target.closest(".ed-grip"); if (!grip) return;
+      e.preventDefault();
+      const row = grip.closest(".ed-row");
+      try { grip.setPointerCapture(e.pointerId); } catch (_) {}
+      grip.classList.add("press");
+      drag = { i: +row.dataset.i, row, grip, y0: e.clientY, y: e.clientY, on: false };
+      drag.timer = setTimeout(() => drag && lift(drag), 250);
+    });
+    box.addEventListener("pointermove", e => {
+      if (!drag) return;
+      drag.y = e.clientY;
+      if (!drag.on) { if (Math.abs(drag.y - drag.y0) > 12) end(true); return; }
+      e.preventDefault(); update();
+      if (!raf) raf = requestAnimationFrame(autoScroll);
+    });
+    box.addEventListener("pointerup", () => end(false));
+    box.addEventListener("pointercancel", () => end(true));
+    box.addEventListener("contextmenu", e => { if (e.target.closest(".ed-grip")) e.preventDefault(); });
     el.querySelector("#ed-add").onclick = () => {
       const last = list[list.length - 1] || {};
       list.push({ grade: last.grade ?? "", cls: last.cls ?? "", no: digits(last.no) != null ? digits(last.no) + 1 : "", name: "", def });
