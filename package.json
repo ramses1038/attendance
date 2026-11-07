@@ -1,0 +1,18 @@
+{
+  "name": "attendance",
+  "version": "1.0.0",
+  "private": true,
+  "description": "수업 출석부 — 웹앱과 안드로이드 앱(Capacitor)",
+  "scripts": {
+    "build:www": "node scripts/build-www.js",
+    "sync": "npm run build:www && npx cap sync android"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.6.0",
+    "@capacitor/core": "8.6.0",
+    "@capgo/capacitor-social-login": "8.7.7"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.6.0"
+  }
+}

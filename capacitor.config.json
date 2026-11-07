@@ -1,0 +1,9 @@
+{
+  "appId": "io.github.ramses1038.attendance",
+  "appName": "출석부",
+  "webDir": "www",
+  "android": { "allowMixedContent": false },
+  "plugins": {
+    "SocialLogin": { "providers": { "google": true, "facebook": false, "apple": false, "twitter": false } }
+  }
+}

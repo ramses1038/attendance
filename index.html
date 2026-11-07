@@ -1650,15 +1650,16 @@ function exportSheet(classes, title) {
   const n = classes.reduce((t, c) => t + classSessions(c.id).length, 0);
   sheet(`<h2>${esc(title)}</h2>
     <p>${classes.length}개 반, 수업 기록 ${n}회를 내보내요.</p>
-    <p class="help"><b>공유하기</b>는 휴대폰 제한 때문에 반마다 CSV 파일로 보내요. 컴퓨터의 엑셀에서 그대로 열려요. 시트가 나뉜 엑셀 파일(.xlsx)이 필요하면 <b>파일로 저장</b>을 눌러 주세요.</p>
+    ${isNative() ? `<p class="help">드라이브의 '${FOLDER_NAME}' 폴더에 학기별 구글 시트로 저장돼요. 컴퓨터에서는 드라이브에서 열어 보시면 돼요.</p>` : `<p class="help"><b>공유하기</b>는 휴대폰 제한 때문에 반마다 CSV 파일로 보내요. 컴퓨터의 엑셀에서 그대로 열려요. 시트가 나뉜 엑셀 파일(.xlsx)이 필요하면 <b>파일로 저장</b>을 눌러 주세요.</p>`}
     <div class="acts">
       ${driveConfigured() ? `<button class="btn primary block" id="ex-drive">${ICON.drive}구글 드라이브에 저장</button>` : ""}
-      <button class="btn ${driveConfigured() ? "" : "primary"} block" id="ex-share">${ICON.share}공유하기 (카카오톡·메일)</button>
-      <button class="btn block" id="ex-save">엑셀 파일(.xlsx)로 저장</button>
+      ${isNative() ? "" : `<button class="btn ${driveConfigured() ? "" : "primary"} block" id="ex-share">${ICON.share}공유하기 (카카오톡·메일)</button>
+      <button class="btn block" id="ex-save">엑셀 파일(.xlsx)로 저장</button>`}
       <button class="btn block" id="ex-cancel">취소</button>
     </div>`, (el, close) => {
-    el.querySelector("#ex-share").onclick = () => { close(); shareOut(classes); };
-    el.querySelector("#ex-save").onclick = () => { close(); saveOut(classes); };
+    const sh = el.querySelector("#ex-share"), sv = el.querySelector("#ex-save");
+    if (sh) sh.onclick = () => { close(); shareOut(classes); };
+    if (sv) sv.onclick = () => { close(); saveOut(classes); };
     const dr = el.querySelector("#ex-drive");
     if (dr) dr.onclick = () => { close(); driveExportNow(); };
     el.querySelector("#ex-cancel").onclick = close;
@@ -1694,9 +1695,31 @@ function finishToken(err, r) {
   try { sessionStorage.setItem(KEY + ".tok", JSON.stringify(tok)); } catch (e) {}
   w.forEach(x => x.res(tok.access_token));
 }
+// 안드로이드 앱(Capacitor)인지
+const isNative = () => !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+let socialLogin = null, socialInit = null;
+// 앱에서는 안드로이드 구글 로그인으로 드라이브 권한을 받음 (웹 로그인 창은 앱 안에서 막혀 있음)
+async function nativeToken() {
+  if (!socialLogin) socialLogin = window.Capacitor.registerPlugin("SocialLogin");
+  if (!socialInit) socialInit = socialLogin.initialize({ google: { webClientId: DRIVE.clientId, mode: "online" } });
+  try {
+    await socialInit;
+    const r = await socialLogin.login({ provider: "google", options: { scopes: [SCOPE] } });
+    const res = (r && r.result) || {};
+    const t = res.accessToken && res.accessToken.token;
+    if (!t) throw new Error("access_denied");
+    if (res.profile && res.profile.email) { dprefs.email = res.profile.email; savePrefs(); }
+    finishToken(null, { access_token: t, expires_in: 3300 });
+    return t;
+  } catch (e) {
+    const m = String((e && (e.message || e.code)) || e);
+    throw new Error(/cancel|취소|16|access_denied/i.test(m) ? "popup_closed" : "native_login: " + m);
+  }
+}
 function getToken(interactive) {
   if (tok && tok.exp > Date.now()) return Promise.resolve(tok.access_token);
   if (!interactive) return Promise.reject(new Error("needs_click"));
+  if (isNative()) return nativeToken();
   if (!(window.google && google.accounts && google.accounts.oauth2)) return Promise.reject(new Error("gis_not_loaded"));
   if (!tokenClient) tokenClient = google.accounts.oauth2.initTokenClient({
     client_id: DRIVE.clientId, scope: SCOPE,
@@ -1838,6 +1861,7 @@ function updateSyncLine() {
 function driveError(e) {
   if (e.message === "gis_not_loaded") toast("구글 로그인 도구를 불러오지 못했어요. 인터넷 연결을 확인해 주세요.");
   else if (/popup|access_denied/.test(e.message)) toast("구글 계정 확인이 취소됐어요. 다시 눌러 주세요.");
+  else if (/^native_login/.test(e.message)) toast("구글 로그인에 실패했어요. " + e.message.replace(/^native_login:\s*/, "").slice(0, 80));
   else toast("드라이브에 연결하지 못했어요. 잠시 뒤 다시 해 주세요.");
 }
 
@@ -1861,7 +1885,7 @@ async function connectDrive() {
   } catch (e) { driveError(e); }
 }
 function disconnectDrive() {
-  try { if (tok && window.google) google.accounts.oauth2.revoke(tok.access_token, () => {}); } catch (e) {}
+  try { if (isNative()) { if (socialLogin) socialLogin.logout({ provider: "google" }).catch(() => {}); } else if (tok && window.google) google.accounts.oauth2.revoke(tok.access_token, () => {}); } catch (e) {}
   tok = null; try { sessionStorage.removeItem(KEY + ".tok"); } catch (e) {}
   Object.keys(dprefs).forEach(k => delete dprefs[k]); savePrefs();
   render(); toast("구글 드라이브 연결을 끊었어요. 드라이브에 있는 파일은 그대로 있어요.");
@@ -2151,7 +2175,7 @@ render();
 setTimeout(() => { if (dprefs.connected && dprefs.pending) syncDrive(false); }, 1500);
 window.addEventListener("online", () => { if (dprefs.connected && dprefs.pending) syncDrive(false); });
 
-if ("serviceWorker" in navigator && location.protocol === "https:") {
+if ("serviceWorker" in navigator && location.protocol === "https:" && !isNative()) {
   navigator.serviceWorker.register("sw.js").catch(() => {});
 }
 })();
