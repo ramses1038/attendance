@@ -1,10 +1,10 @@
 name: 안드로이드 앱 빌드
 
-# 깃허브 'Actions' 탭에서 직접 실행하거나, v로 시작하는 태그를 올리면 앱을 만들어 릴리스에 올림 (Obtainium이 여기서 받아 감)
+# 'release' 브랜치에 올리거나 깃허브 'Actions' 탭에서 직접 실행하면 앱을 만들어 릴리스에 올림 (Obtainium이 여기서 받아 감)
 on:
   workflow_dispatch:
   push:
-    tags: ["v*"]
+    branches: [release]
 
 permissions:
   contents: write
