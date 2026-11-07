@@ -1708,12 +1708,16 @@ async function nativeToken() {
     const res = (r && r.result) || {};
     const t = res.accessToken && res.accessToken.token;
     if (!t) throw new Error("access_denied");
+    try {
+      const info = await (await fetch("https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=" + encodeURIComponent(t))).json();
+      if (info.scope && !info.scope.includes("drive.file")) throw new Error("no_drive_scope: " + info.scope);
+    } catch (err) { if (/no_drive_scope/.test(err.message)) throw err; }
     if (res.profile && res.profile.email) { dprefs.email = res.profile.email; savePrefs(); }
     finishToken(null, { access_token: t, expires_in: 3300 });
     return t;
   } catch (e) {
     const m = String((e && (e.message || e.code)) || e);
-    throw new Error(/cancel|취소|16|access_denied/i.test(m) ? "popup_closed" : "native_login: " + m);
+    throw new Error(/cancel|취소|access_denied/i.test(m) && !/no_drive_scope/.test(m) ? "popup_closed" : "native_login: " + m);
   }
 }
 function getToken(interactive) {
@@ -1735,7 +1739,10 @@ async function gfetch(url, opts, interactive) {
   const t = await getToken(interactive);
   const r = await fetch(url, Object.assign({}, opts, { headers: Object.assign({}, (opts || {}).headers, { Authorization: "Bearer " + t }) }));
   if (r.status === 401) { tok = null; try { sessionStorage.removeItem(KEY + ".tok"); } catch (e) {} throw new Error("expired"); }
-  if (!r.ok) throw new Error("http_" + r.status);
+  if (!r.ok) {
+    let why = ""; try { const j = await r.json(); why = (j.error && (j.error.message || j.error.status)) || ""; } catch (_) {}
+    throw new Error("http_" + r.status + (why ? " " + why : ""));
+  }
   return r;
 }
 const gjson = async (url, opts, i) => (await gfetch(url, opts, i)).json();
@@ -1861,7 +1868,8 @@ function updateSyncLine() {
 function driveError(e) {
   if (e.message === "gis_not_loaded") toast("구글 로그인 도구를 불러오지 못했어요. 인터넷 연결을 확인해 주세요.");
   else if (/popup|access_denied/.test(e.message)) toast("구글 계정 확인이 취소됐어요. 다시 눌러 주세요.");
-  else if (/^native_login/.test(e.message)) toast("구글 로그인에 실패했어요. " + e.message.replace(/^native_login:\s*/, "").slice(0, 80));
+  else if (/^native_login/.test(e.message)) ask({ title: "구글 로그인에 실패했어요", body: `아래 내용을 캡처해서 알려 주시면 고칠게요.<br><code>${esc(e.message.replace(/^native_login:\s*/, "").slice(0, 300))}</code>`, actions: [{ label: "확인", cls: "primary" }] });
+  else if (isNative()) ask({ title: "드라이브에 연결하지 못했어요", body: `아래 내용을 캡처해서 알려 주시면 고칠게요.<br><code>${esc(String(e.message || e).slice(0, 300))}</code>`, actions: [{ label: "확인", cls: "primary" }] });
   else toast("드라이브에 연결하지 못했어요. 잠시 뒤 다시 해 주세요.");
 }
 
