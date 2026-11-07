@@ -6,4 +6,7 @@ fs.mkdirSync(out);
 for (const f of ["index.html", "xlsx.full.min.js", "manifest.webmanifest", "icon-192.png", "icon-512.png", "icon-maskable.png", "apple-touch-icon.png"]) {
   fs.copyFileSync(path.join(root, f), path.join(out, f));
 }
+// 앱에서만 쓰는 연결 코드 (Capacitor 본체, 구글 로그인 플러그인)
+fs.copyFileSync(path.join(root, "node_modules/@capacitor/core/dist/capacitor.js"), path.join(out, "capacitor-core.js"));
+fs.copyFileSync(path.join(root, "node_modules/@capgo/capacitor-social-login/dist/plugin.js"), path.join(out, "social-login.js"));
 console.log("www 준비 완료");

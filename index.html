@@ -1699,8 +1699,16 @@ function finishToken(err, r) {
 const isNative = () => !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
 let socialLogin = null, socialInit = null;
 // 앱에서는 안드로이드 구글 로그인으로 드라이브 권한을 받음 (웹 로그인 창은 앱 안에서 막혀 있음)
+function loadScriptOnce(src) {
+  return new Promise((res, rej) => { const el = document.createElement("script"); el.src = src; el.onload = res; el.onerror = () => rej(new Error("load " + src)); document.head.appendChild(el); });
+}
 async function nativeToken() {
-  if (!socialLogin) socialLogin = window.Capacitor.registerPlugin("SocialLogin");
+  if (!socialLogin) {
+    // 앱 안에 함께 넣은 Capacitor·구글 로그인 연결 코드를 불러옴
+    if (!window.capacitorExports) await loadScriptOnce("capacitor-core.js");
+    if (!window.capacitorCapacitorUpdater) await loadScriptOnce("social-login.js");
+    socialLogin = window.capacitorCapacitorUpdater.SocialLogin;
+  }
   if (!socialInit) socialInit = socialLogin.initialize({ google: { webClientId: DRIVE.clientId, mode: "online" } });
   try {
     await socialInit;
