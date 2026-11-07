@@ -1316,9 +1316,10 @@ function groupRows(rows, def) {
 }
 function parseWorkbook(wb, fileName) {
   const base = fileName.replace(/\.[^.]+$/, "");
-  const multi = wb.SheetNames.length > 1;
+  const multi = wb.SheetNames.filter(n => !SKIP_SHEET.test(n)).length > 1;
   const all = [];
   for (const sn of wb.SheetNames) {
+    if (SKIP_SHEET.test(sn)) continue; // 양식의 사용법·예시 시트
     const rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, defval: "", raw: false });
     const plain = /^(sheet|시트)\s*\d*$/i.test(sn.trim());
     const def = (multi || !plain) ? sn.trim() : base;
@@ -1563,6 +1564,7 @@ function buildWorkbook(classes) {
   const used = new Set(["진도 기록"]);
   const stamp = nowDT();
   const prog = [["반", "수업 일시", "재적", "출석", "결석", "제외", "결석 학생", "진도 메모"]];
+  wb.meta = {}; // 시트별 고정 칸 수 (드라이브 시트 꾸미기에 씀)
   for (const cls of classes) {
     const ses = classSessions(cls.id);
     const studs = [...cls.students].sort(byNo);
@@ -1571,7 +1573,8 @@ function buildWorkbook(classes) {
       [`${cls.name} 출석부`],
       [`내보낸 시각 ${stamp}  ·  O = 출석, X = 결석, 위탁·수능 준비반·숙려제 등 = 출석 제외, - = 그때 명단에 없음`],
       [],
-      [...(mixed ? ["소속"] : []), "번호", "이름", ...ses.map(s => colDT(s.dt)), "출석 수", "결석 수"]
+      [...(mixed ? ["소속"] : []), "번호", "이름", ...ses.map(s => colDT(s.dt)), "출석 수", "결석 수"],
+      [...(mixed ? [""] : []), "", "진도", ...ses.map(s => (s.memo || "").trim()), "", ""]
     ];
     for (const st of studs) {
       let p = 0, a = 0;
@@ -1586,7 +1589,9 @@ function buildWorkbook(classes) {
     aoa.push([...(mixed ? [""] : []), "", "결석 인원", ...ses.map(s => s.absent.length), "", ""]);
     const ws = XLSX.utils.aoa_to_sheet(aoa);
     ws["!cols"] = [...(mixed ? [{ wch: 7 }] : []), { wch: 6 }, { wch: 14 }, ...ses.map(() => ({ wch: 14 })), { wch: 8 }, { wch: 8 }];
-    XLSX.utils.book_append_sheet(wb, ws, sheetName(cls.name, used));
+    const title = sheetName(cls.name, used);
+    XLSX.utils.book_append_sheet(wb, ws, title);
+    wb.meta[title] = { cols: mixed ? 3 : 2, width: (mixed ? 3 : 2) + ses.length + 2 };
     for (const s of ses) {
       const all = activeAt(cls, s.dt).length, n = callAt(cls, s.dt).length;
       const names = s.absent.map(id => (cls.students.find(x => x.id === id) || {}).name).filter(Boolean).join(", ");
@@ -1596,6 +1601,7 @@ function buildWorkbook(classes) {
   const pws = XLSX.utils.aoa_to_sheet(prog);
   pws["!cols"] = [{ wch: 14 }, { wch: 15 }, { wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 24 }, { wch: 50 }];
   XLSX.utils.book_append_sheet(wb, pws, "진도 기록");
+  buildWorkbook.lastMeta = wb.meta;
   return wb;
 }
 function exportFile(classes) {
@@ -1604,7 +1610,7 @@ function exportFile(classes) {
   const fname = `출석부_${label}_${d}.xlsx`.replace(/[\\/:*?"<>|]/g, "_");
   const data = XLSX.write(buildWorkbook(classes), { bookType: "xlsx", type: "array" });
   const type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-  return { fname, blob: new Blob([data], { type }), file: new File([data], fname, { type }) };
+  return { fname, blob: new Blob([data], { type }), file: new File([data], fname, { type }), meta: buildWorkbook.lastMeta };
 }
 // 안드로이드 크롬·삼성 인터넷은 공유 메뉴로 .xlsx를 보낼 수 없어서(허용 형식 제한) CSV로 보냄
 function csvFiles(classes) {
@@ -1745,6 +1751,30 @@ async function upsert(name, mime, blob, idKey, i) {
   dprefs[idKey] = j.id; savePrefs(); return j.id;
 }
 
+// 제목 두 줄(날짜·교시 / 진도)을 줄바꿈·굵게·고정. 구글 Sheets API가 꺼져 있으면 하루 동안 건너뜀
+async function formatSheet(id, meta) {
+  if (!id || !meta || dprefs.fmtSkip === todayStr()) return;
+  try {
+    const info = await gjson(`https://sheets.googleapis.com/v4/spreadsheets/${id}?fields=sheets.properties(sheetId,title)`, {}, false);
+    const reqs = [];
+    for (const sh of info.sheets || []) {
+      const { sheetId, title } = sh.properties;
+      if (title === "진도 기록") {
+        reqs.push({ updateSheetProperties: { properties: { sheetId, gridProperties: { frozenRowCount: 1 } }, fields: "gridProperties.frozenRowCount" } });
+        reqs.push({ repeatCell: { range: { sheetId, startRowIndex: 0, endRowIndex: 1 }, cell: { userEnteredFormat: { textFormat: { bold: true } } }, fields: "userEnteredFormat.textFormat.bold" } });
+        reqs.push({ repeatCell: { range: { sheetId, startColumnIndex: 7, endColumnIndex: 8 }, cell: { userEnteredFormat: { wrapStrategy: "WRAP", verticalAlignment: "TOP" } }, fields: "userEnteredFormat(wrapStrategy,verticalAlignment)" } });
+        continue;
+      }
+      const m = meta[title]; if (!m) continue;
+      reqs.push({ updateSheetProperties: { properties: { sheetId, gridProperties: { frozenRowCount: 5, frozenColumnCount: m.cols } }, fields: "gridProperties(frozenRowCount,frozenColumnCount)" } });
+      reqs.push({ repeatCell: { range: { sheetId, startRowIndex: 3, endRowIndex: 4, endColumnIndex: m.width }, cell: { userEnteredFormat: { textFormat: { bold: true }, horizontalAlignment: "CENTER", backgroundColor: { red: .89, green: .925, blue: .965 } } }, fields: "userEnteredFormat(textFormat,horizontalAlignment,backgroundColor)" } });
+      reqs.push({ repeatCell: { range: { sheetId, startRowIndex: 4, endRowIndex: 5, endColumnIndex: m.width }, cell: { userEnteredFormat: { wrapStrategy: "WRAP", verticalAlignment: "TOP", textFormat: { fontSize: 9 }, backgroundColor: { red: .98, green: .965, blue: .9 } } }, fields: "userEnteredFormat(wrapStrategy,verticalAlignment,textFormat,backgroundColor)" } });
+      reqs.push({ repeatCell: { range: { sheetId, startRowIndex: 5, startColumnIndex: m.cols, endColumnIndex: m.width }, cell: { userEnteredFormat: { horizontalAlignment: "CENTER" } }, fields: "userEnteredFormat.horizontalAlignment" } });
+    }
+    if (reqs.length) await gfetch(`https://sheets.googleapis.com/v4/spreadsheets/${id}:batchUpdate`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ requests: reqs }) }, false);
+  } catch (e) { if (!isAuthErr(e)) { dprefs.fmtSkip = todayStr(); savePrefs(); } }
+}
+
 let syncing = null;
 function syncDrive(interactive) {
   if (!driveConfigured() || !dprefs.connected) return Promise.resolve(false);
@@ -1755,7 +1785,11 @@ function syncDrive(interactive) {
       await upsert(BACKUP_NAME, "application/json", new Blob([JSON.stringify(backup)], { type: "application/json" }), "backupId", interactive);
       // 지금 보고 있는 학기의 출석부 시트 (예: 출석부_2026년2학기)
       const cur = termClasses();
-      if (window.XLSX && cur.length) await upsert(sheetNameOf(S.term), GSHEET_MIME, exportFile(cur).blob, "sheet_" + S.term, interactive);
+      if (window.XLSX && cur.length) {
+        const ex = exportFile(cur);
+        const sid = await upsert(sheetNameOf(S.term), GSHEET_MIME, ex.blob, "sheet_" + S.term, interactive);
+        formatSheet(sid, ex.meta).catch(() => {});
+      }
       dprefs.lastSync = nowDT(); dprefs.pending = false; dprefs.lastError = ""; savePrefs();
       if (!dprefs.email) rememberEmail();
       return true;
@@ -1875,6 +1909,60 @@ function loadPicker() {
     gapi.load("picker", { callback: res, onerror: () => rej(new Error("gis_not_loaded")) });
   });
 }
+const TEMPLATE_NAME = "수업 출석부 명렬표 양식";
+const SKIP_SHEET = /^\s*(예시|사용법)/;
+function templateBlob() {
+  const H = ["학년", "반", "번호", "이름"];
+  const wb = XLSX.utils.book_new();
+  const guide = XLSX.utils.aoa_to_sheet([
+    ["수업 출석부 명렬표 양식 사용법"], [],
+    ["1. 반마다 시트를 하나씩 만들어 주세요. 시트 하나가 출석부의 반 하나가 돼요."],
+    ["2. 시트 이름이 반 이름이 돼요. (예: 2학년 1반, 생명과학2 B반)"],
+    ["3. 첫 줄의 학년·반·번호·이름 제목은 그대로 두고, 둘째 줄부터 학생을 적어 주세요."],
+    ["4. 학년·반·번호는 비워도 되지만 이름은 꼭 적어 주세요."],
+    ["5. 여러 반 학생이 섞인 수업(고교학점제)도 한 시트에 적으면 한 반이 돼요. 학년·반 칸에는 학생의 소속 반을 적어 주세요."],
+    ["6. 이 '사용법' 시트와 이름이 '예시'로 시작하는 시트는 불러오지 않아요. 예시 시트를 복사해서 이름을 바꿔 쓰면 편해요."],
+    ["7. 다 적었으면 출석부 앱 → 명단 올리기 → '내 양식에서 불러오기'를 눌러 주세요."]
+  ]);
+  guide["!cols"] = [{ wch: 90 }];
+  XLSX.utils.book_append_sheet(wb, guide, "사용법");
+  const sh = rows => { const w = XLSX.utils.aoa_to_sheet([H, ...rows]); w["!cols"] = [{ wch: 6 }, { wch: 8 }, { wch: 6 }, { wch: 14 }]; return w; };
+  XLSX.utils.book_append_sheet(wb, sh([[2, 1, 1, "홍길동"], [2, 1, 2, "이순신"], [2, 1, 3, "안창호"]]), "예시) 2학년 1반");
+  XLSX.utils.book_append_sheet(wb, sh([[3, 1, 5, "홍길동"], [3, 4, 12, "이순신"], [3, 7, 3, "안창호"]]), "예시) 생명과학2 B반");
+  XLSX.utils.book_append_sheet(wb, sh([]), "새 반 (시트 이름을 반 이름으로)");
+  return new Blob([XLSX.write(wb, { bookType: "xlsx", type: "array" })], { type: XLSX_MIME });
+}
+const sheetUrl = id => `https://docs.google.com/spreadsheets/d/${id}/edit`;
+async function makeTemplate() {
+  if (!window.XLSX) return toast("엑셀 도구를 불러오지 못했어요. 인터넷 연결을 확인해 주세요.");
+  try {
+    await getToken(true);
+    if (!dprefs.connected) { dprefs.connected = true; savePrefs(); await rememberEmail(); }
+    toast("내 드라이브에 양식을 만드는 중이에요");
+    const folder = await ensureFolder(true);
+    const fd = new FormData();
+    fd.append("metadata", new Blob([JSON.stringify({ name: TEMPLATE_NAME, parents: [folder], mimeType: GSHEET_MIME })], { type: "application/json" }));
+    fd.append("file", templateBlob());
+    const j = await gjson(`${UP}?uploadType=multipart&fields=id`, { method: "POST", body: fd }, true);
+    dprefs.templateId = j.id; savePrefs();
+    sheet(`<h2>명렬표 양식을 만들었어요</h2>
+      <p>내 드라이브의 <b>'${FOLDER_NAME}'</b> 폴더에 <b>'${TEMPLATE_NAME}'</b> 구글 시트가 생겼어요. 반마다 시트를 만들어 명단을 적은 뒤, 명단 올리기에서 <b>내 양식에서 불러오기</b>를 눌러 주세요.</p>
+      <div class="acts">
+        <a class="btn primary block" href="${sheetUrl(j.id)}" target="_blank" rel="noopener">양식 열기</a>
+        <button class="btn block" id="tp-x">닫기</button>
+      </div>`, (el, close) => { el.querySelector("#tp-x").onclick = close; el.querySelector("a").addEventListener("click", () => setTimeout(close, 300)); });
+  } catch (e) { driveError(e); }
+}
+async function importTemplate() {
+  try {
+    const id = await aliveId(dprefs.templateId, true);
+    if (!id) { dprefs.templateId = ""; savePrefs(); return ask({ title: "양식을 찾지 못했어요", body: "드라이브에서 양식이 지워졌거나 휴지통에 있어요. 양식을 새로 만들어 주세요.", actions: [{ label: "양식 새로 만들기", cls: "primary", fn: makeTemplate }, { label: "닫기" }] }); }
+    toast("양식을 불러오는 중이에요");
+    const buf = await (await gfetch(`${API}/${id}/export?mimeType=${q(XLSX_MIME)}`, {}, true)).arrayBuffer();
+    handleBuffer(buf, TEMPLATE_NAME);
+  } catch (e) { driveError(e); }
+}
+
 async function pickFromDrive() {
   let t;
   try { t = await getToken(true); await loadPicker(); }
@@ -1902,15 +1990,22 @@ async function pickFromDrive() {
 
 function openImportChoice() {
   const drive = driveConfigured() && DRIVE.apiKey;
+  const tp = drive && dprefs.templateId;
   sheet(`<h2>명단 올리기</h2>
-    <p>아래 양식의 명렬표 엑셀 파일(또는 구글 스프레드시트)을 구글 드라이브에서 불러와 주세요.</p>
+    <p>${tp ? "내 드라이브의 명렬표 양식에 명단을 적었다면 <b>내 양식에서 불러오기</b>를 눌러 주세요." : "<b>명렬표 양식</b>을 내 구글 드라이브에 만들어 명단을 적은 뒤 불러오면 가장 편해요. 아래 양식의 엑셀 파일이나 구글 스프레드시트를 드라이브에서 직접 골라도 돼요."}</p>
     ${FORMAT_HTML}
     <div class="acts">
-      ${drive ? `<button class="btn primary block" id="im-drive">${ICON.drive}구글 드라이브에서 불러오기</button>` : ""}
+      ${tp ? `<button class="btn primary block" id="im-tp">${ICON.drive}내 양식에서 불러오기</button>
+              <a class="btn block" href="${sheetUrl(dprefs.templateId)}" target="_blank" rel="noopener">양식 열어서 명단 적기</a>` : ""}
+      ${drive && !tp ? `<button class="btn primary block" id="im-make">${ICON.drive}명렬표 양식 만들기 (내 드라이브)</button>` : ""}
+      ${drive ? `<button class="btn block" id="im-drive">구글 드라이브에서 다른 파일 고르기</button>` : ""}
       <button class="btn ${drive ? "" : "primary"} block" id="im-type">표에 직접 입력하기</button>
+      ${tp ? `<button class="btn block" id="im-make">명렬표 양식 새로 만들기</button>` : ""}
       <button class="btn block" id="im-cancel">취소</button>
     </div>`, (el, close) => {
     const on = (id, fn) => { const b = el.querySelector(id); if (b) b.onclick = () => { close(); fn(); }; };
+    on("#im-tp", importTemplate);
+    on("#im-make", makeTemplate);
     on("#im-drive", pickFromDrive);
     on("#im-type", () => openRowEditor([{ grade: "", cls: "", no: 1, name: "" }], "새 반", "명단 직접 입력"));
     on("#im-cancel", () => {});
