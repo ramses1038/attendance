@@ -1,6 +1,6 @@
 {
   "appId": "io.github.ramses1038.attendance",
-  "appName": "출석부",
+  "appName": "출석부 냠냠",
   "webDir": "www",
   "android": { "allowMixedContent": false },
   "plugins": {

@@ -1,6 +1,6 @@
 {
-  "name": "수업 출석부",
-  "short_name": "출석부",
+  "name": "출석부 냠냠",
+  "short_name": "출석부 냠냠",
   "description": "반별 명단으로 터치·음성 출석을 하고 진도를 기록하는 수업용 출석부",
   "lang": "ko",
   "start_url": "./",
