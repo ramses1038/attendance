@@ -190,7 +190,7 @@ main.wrap { padding-block: 16px 140px; display: flex; flex-direction: column; ga
 .tally button.sel { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 .filter-note { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 14px; font-weight: 600; color: var(--accent); }
 .filter-note:empty { display: none; }
-.off-tile { background: var(--off-bg); border-color: transparent; color: var(--off-ink); cursor: default; }
+.tile.off-tile { background: var(--off-bg); border: 1px dashed var(--off-ink); color: var(--off-ink); cursor: default; }
 .mark.offm { color: var(--off-ink); }
 .who-list { display: flex; flex-wrap: wrap; gap: 6px; }
 .who-list span { border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; font-size: 15px; font-weight: 600; background: var(--bg); }
@@ -761,7 +761,6 @@ function renderClass() {
       <div class="filter-note" id="filter-note"></div>
       <div class="grid" id="grid"></div>
       <p class="hold-hint">학생 이름을 <b>꾹 누르면</b> 위탁·수능 준비반·숙려제 등 상태를 바로 바꿀 수 있어요.</p>
-      ${offList.length ? `<p class="excluded">출석을 부르지 않는 학생 ${offList.length}명 · ${offList.map(s => `${s.no ?? ""} ${esc(s.name)} <b>${esc(offAt(s, d.dt))}</b>`).join(", ")}</p>` : ""}
 
       <label class="memo-field"><span class="label">오늘 진도 (선택)</span>
         <textarea id="memo" placeholder="예: 2단원 매체 언어의 특성, 활동지 3번까지">${esc(d.memo)}</textarea>
@@ -791,20 +790,16 @@ function drawGrid() {
   const offs = all.filter(s => offAt(s, d.dt));
   const absentN = call.filter(s => d.absent.has(s.id)).length;
   document.getElementById("tally").innerHTML = tallyHTML(all.length, call.length, absentN);
-  let list, tiles;
-  if (f === "off") {
-    list = offs;
-    tiles = list.map(s => `<div class="tile off-tile" data-oid="${s.id}"><span class="no">${noLabel(s)}</span><span class="mark offm">${esc(offAt(s, d.dt))}</span><span class="name">${esc(s.name)}</span></div>`).join("");
-  } else {
-    list = f === "present" ? call.filter(s => !d.absent.has(s.id)) : f === "absent" ? call.filter(s => d.absent.has(s.id)) : call;
-    tiles = list.map(s => tileHTML(s, d.absent.has(s.id))).join("");
-  }
+  // 전체(재적)에는 제외 학생도 번호 자리에 제외 상태로 함께 보여 줌
+  const list = f === "off" ? offs : f === "present" ? call.filter(s => !d.absent.has(s.id)) : f === "absent" ? call.filter(s => d.absent.has(s.id)) : all;
+  const tiles = list.map(s => offAt(s, d.dt) ? offTileHTML(s, offAt(s, d.dt)) : tileHTML(s, d.absent.has(s.id))).join("");
   const label = { present: "출석", absent: "결석", off: "출석 제외" }[f];
   document.getElementById("filter-note").innerHTML = label
     ? `<span>${label} ${list.length}명만 보는 중</span><button class="btn small" data-tally="all">전체 보기</button>` : "";
   document.getElementById("grid").innerHTML = list.length ? tiles
     : `<p class="help">${f === "all" ? "출석을 부를 학생이 없어요. 위쪽 <b>명단수정</b>에서 학생을 추가해 주세요." : `${label} 학생이 없어요.`}</p>`;
 }
+const offTileHTML = (s, why) => `<div class="tile off-tile" data-oid="${s.id}"><span class="no">${noLabel(s)}</span><span class="mark offm">${esc(why)}</span><span class="name">${esc(s.name)}</span></div>`;
 const noLabel = s => { const h = S.mixed ? homeOf(s) : ""; return h ? `${h}${s.no != null ? " · " + s.no : ""}` : (s.no ?? ""); };
 const tileHTML = (s, absent) => `<button class="tile ${absent ? "absent" : ""}" data-sid="${s.id}" aria-pressed="${absent}">
   <span class="no">${noLabel(s)}</span>${absent ? '<span class="mark">결석</span>' : ""}<span class="name">${esc(s.name)}</span></button>`;
@@ -1192,7 +1187,7 @@ function renderSession() {
   const all = activeAt(cls, ses.dt), call = callAt(cls, ses.dt);
   const offs = all.filter(s => offAt(s, ses.dt));
   const f = S.filter || "all", on = k => (f === k ? " sel" : "");
-  const shown = f === "absent" ? call.filter(s => absent.has(s.id)) : f === "present" ? call.filter(s => !absent.has(s.id)) : f === "off" ? offs : call;
+  const shown = f === "absent" ? call.filter(s => absent.has(s.id)) : f === "present" ? call.filter(s => !absent.has(s.id)) : f === "off" ? offs : all;
   const tile = s => offAt(s, ses.dt)
     ? `<div class="tile off-tile"><span class="no">${noLabel(s)}</span><span class="mark offm">${esc(offAt(s, ses.dt))}</span><span class="name">${esc(s.name)}</span></div>`
     : `<div class="tile view ${absent.has(s.id) ? "absent" : ""}"><span class="no">${noLabel(s)}</span>${absent.has(s.id) ? '<span class="mark">결석</span>' : ""}<span class="name">${esc(s.name)}</span></div>`;
@@ -1218,7 +1213,6 @@ function renderSession() {
       </div>
       ${label ? `<div class="filter-note"><span>${label} ${shown.length}명만 보는 중</span><button class="btn small" data-vf="all">전체 보기</button></div>` : ""}
       <div class="grid">${shown.length ? shown.map(tile).join("") : `<p class="help">${label || "출석을 부른"} 학생이 없어요.</p>`}</div>
-      ${f === "all" && offs.length ? `<p class="excluded">출석을 부르지 않은 학생 ${offs.length}명 · ${offs.map(s => `${s.no ?? ""} ${esc(s.name)} <b>${esc(offAt(s, ses.dt))}</b>`).join(", ")}</p>` : ""}
       <p class="help">조회 화면이라 여기서는 바뀌지 않아요. 고치려면 아래 <b>이날 출석 고치기</b>를 눌러 주세요.</p>
     </main>
     <div class="dock"><div class="wrap">
